@@ -170,7 +170,7 @@ body > div > div {
   }
 
   h2 {
-    font-size: 1.35em;
+    font-size: 1.45em;
   }
 
   pre {
@@ -211,22 +211,11 @@ body > div > div {
     overflow-y: hidden;
     padding-bottom: 2px;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: var(--sn-stylekit-scrollbar-thumb-color) transparent;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 
     &::-webkit-scrollbar {
-      height: 8px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background-color: var(--sn-stylekit-scrollbar-thumb-color);
-      background-clip: padding-box;
-      border: 2px solid transparent;
-      border-radius: 8px;
+      display: none;
     }
   }
 

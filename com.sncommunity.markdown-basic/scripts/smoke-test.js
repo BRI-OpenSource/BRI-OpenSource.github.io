@@ -166,7 +166,7 @@ function assertScrollbarCss() {
   expectIncludes(previewH1, 'font-size: 1.6em;', 'preview h1 CSS');
 
   const previewH2 = blockFor(preview, 'h2 {');
-  expectIncludes(previewH2, 'font-size: 1.35em;', 'preview h2 CSS');
+  expectIncludes(previewH2, 'font-size: 1.45em;', 'preview h2 CSS');
 
   const mathWrapperSelector = 'section,\n  eq,\n  eqn';
   const mathWrapper = blockFor(preview, mathWrapperSelector);
@@ -184,7 +184,10 @@ function assertScrollbarCss() {
   expectIncludes(mathScroller, 'max-width: 100%;', 'math scroller CSS');
   expectIncludes(mathScroller, 'overflow-x: auto;', 'math scroller CSS');
   expectIncludes(mathScroller, 'overflow-y: hidden;', 'math scroller CSS');
-  expectIncludes(mathScroller, 'scrollbar-width: thin;', 'math scroller CSS');
+  expectIncludes(mathScroller, '-ms-overflow-style: none;', 'math scroller CSS');
+  expectIncludes(mathScroller, 'scrollbar-width: none;', 'math scroller CSS');
+  const webkitMathScroller = blockFor(mathScroller, '&::-webkit-scrollbar');
+  expectIncludes(webkitMathScroller, 'display: none;', 'math scroller WebKit scrollbar CSS');
 
   const displayMath = blockFor(preview, '.katex-display {', preview.indexOf(mathScrollerSelector) + mathScrollerSelector.length);
   expectIncludes(displayMath, 'text-align: left;', 'display math scroller CSS');
