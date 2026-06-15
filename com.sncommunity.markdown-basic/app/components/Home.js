@@ -34,26 +34,6 @@ export default class Home extends React.Component {
 
     this.configureResizer();
     this.addTabHandler();
-
-    this.scrollTriggers = {};
-    this.scrollHandlers = [
-      { el: this.editor, handler: this.scrollHandler(this.editor, this.preview) },
-      { el: this.preview, handler: this.scrollHandler(this.preview, this.editor) }
-    ];
-  }
-
-  UNSAFE_componentWillUpdate(nextProps, nextState) {
-    let prevMode = this.state.mode.mode;
-    let nextMode = nextState.mode.mode;
-
-    // If we changed to Split mode we add the scroll listeners
-    if (prevMode !== nextMode) {
-      if (nextMode === SplitMode) {
-        this.addScrollListeners();
-      } else {
-        this.removeScrollListeners();
-      }
-    }
   }
 
   setModeFromModeValue(value) {
@@ -183,43 +163,6 @@ export default class Home extends React.Component {
         });
       }
     });
-  }
-
-  addScrollListeners() {
-    this.scrollHandlers.forEach(({ el, handler }) => el.addEventListener('scroll', handler));
-  }
-
-  removeScrollListeners() {
-    this.scrollHandlers.forEach(({ el, handler }) => el.removeEventListener('scroll', handler));
-  }
-
-  scrollHandler = (source, destination) => {
-    let frameRequested;
-
-    return (event) => {
-      // Avoid the cascading effect by not handling the event if it was triggered initially by this element
-      if (this.scrollTriggers[source] === true) {
-        this.scrollTriggers[source] = false;
-        return;
-      }
-      this.scrollTriggers[source] = true;
-
-      // Only request the animation frame once until it gets processed
-      if (frameRequested) {
-        return;
-      }
-      frameRequested = true;
-
-      window.requestAnimationFrame(() => {
-        let target = event.target;
-        let height = target.scrollHeight - target.clientHeight;
-        let ratio = parseFloat(target.scrollTop) / height;
-        let move = (destination.scrollHeight - destination.clientHeight) * ratio;
-        destination.scrollTop = move;
-
-        frameRequested = false;
-      });
-    };
   }
 
   removeSelection() {
