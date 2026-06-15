@@ -157,8 +157,36 @@ function assertScrollbarCss() {
   expectIncludes(preview, '&.preview', 'preview CSS');
   expectIncludes(preview, 'width: 100% !important;', 'preview mode CSS');
   expectIncludes(preview, 'overflow: auto;', 'preview CSS');
+  expectIncludes(preview, 'overflow-x: hidden;', 'preview CSS');
+  expectIncludes(preview, 'overflow-y: auto;', 'preview CSS');
   expectIncludes(preview, 'flex: 1;', 'preview CSS');
   assert(!/&\.edit\s*\{[^}]*display:\s*none/s.test(preview), 'preview edit mode should not use display:none');
+
+  const mathWrapperSelector = 'section,\n  eq,\n  eqn';
+  const mathWrapper = blockFor(preview, mathWrapperSelector);
+  expectIncludes(mathWrapper, 'max-width: 100%;', 'math wrapper CSS');
+
+  const inlineWrapper = blockFor(preview, 'eq {');
+  expectIncludes(inlineWrapper, 'display: inline-block;', 'inline math wrapper CSS');
+  expectIncludes(inlineWrapper, 'vertical-align: middle;', 'inline math wrapper CSS');
+
+  const blockWrapper = blockFor(preview, 'eqn {', preview.indexOf(mathWrapperSelector) + mathWrapperSelector.length);
+  expectIncludes(blockWrapper, 'display: block;', 'display math wrapper CSS');
+
+  const mathScrollerSelector = 'eq > .katex,\n  .katex-display';
+  const mathScroller = blockFor(preview, mathScrollerSelector);
+  expectIncludes(mathScroller, 'max-width: 100%;', 'math scroller CSS');
+  expectIncludes(mathScroller, 'overflow-x: auto;', 'math scroller CSS');
+  expectIncludes(mathScroller, 'overflow-y: hidden;', 'math scroller CSS');
+  expectIncludes(mathScroller, 'scrollbar-width: thin;', 'math scroller CSS');
+
+  const displayMath = blockFor(preview, '.katex-display {', preview.indexOf(mathScrollerSelector) + mathScrollerSelector.length);
+  expectIncludes(displayMath, 'text-align: left;', 'display math scroller CSS');
+
+  const displayKatex = blockFor(preview, '.katex-display > .katex');
+  expectIncludes(displayKatex, 'display: inline-block;', 'display KaTeX CSS');
+  expectIncludes(displayKatex, 'min-width: 100%;', 'display KaTeX CSS');
+  expectIncludes(displayKatex, 'text-align: center;', 'display KaTeX CSS');
 }
 
 assertKatexRendering();

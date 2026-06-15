@@ -156,6 +156,8 @@ body > div > div {
   }
 
   overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   flex: 1;
   word-wrap: break-word;
 
@@ -176,6 +178,63 @@ body > div > div {
     // We went with overflow: auto instead to make it scroll
     // white-space: normal;
     // word-break: break-all;
+  }
+
+  section,
+  eq,
+  eqn {
+    max-width: 100%;
+  }
+
+  eq {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  eqn {
+    display: block;
+  }
+
+  eq > .katex,
+  .katex-display {
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sn-stylekit-scrollbar-thumb-color) transparent;
+
+    &::-webkit-scrollbar {
+      height: 8px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: var(--sn-stylekit-scrollbar-thumb-color);
+      background-clip: padding-box;
+      border: 2px solid transparent;
+      border-radius: 8px;
+    }
+  }
+
+  eq > .katex {
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .katex-display {
+    text-align: left;
+  }
+
+  .katex-display > .katex {
+    display: inline-block;
+    min-width: 100%;
+    text-align: center;
   }
 
   pre code {

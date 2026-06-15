@@ -30,10 +30,17 @@ const noteText = [
   'Since \\(L_0(r) \\propto -K/r\\), we can read the radial behavior.',
   'We look for static, spherically symmetric background solutions \\(\\partial_t = 0\\).',
   '',
+  'Long inline equation: \\(\\Gamma^{\\lambda}_{\\mu\\nu} + R^{\\rho}_{\\sigma\\mu\\nu} + \\nabla_\\alpha \\nabla_\\beta \\nabla_\\gamma \\nabla_\\delta \\Phi_{\\lambda\\rho\\sigma\\mu\\nu} + \\Lambda g_{\\mu\\nu} + \\frac{8\\pi G}{c^4}T_{\\mu\\nu} + \\mathcal{A}_{\\alpha\\beta\\gamma\\delta} + \\mathcal{B}^{\\lambda\\rho}_{\\sigma\\mu\\nu} + \\sum_{n=1}^{100} \\frac{n^2 + \\alpha_n}{n^3 + \\beta_n} + \\prod_{k=1}^{20} \\left(1 + \\frac{x_k}{r^2}\\right) = 0\\) should scroll locally.',
+  '',
   'Display bracket:',
   '\\[',
   '\\int_0^1 x^2 \\, dx = \\frac{1}{3}',
   '\\]',
+  '',
+  'Long display equation:',
+  '$$',
+  '\\Gamma^{\\lambda}_{\\mu\\nu} = \\tfrac{1}{2} g^{\\lambda\\sigma}\\left( \\partial_\\mu g_{\\nu\\sigma} + \\partial_\\nu g_{\\mu\\sigma} - \\partial_\\sigma g_{\\mu\\nu} \\right) + R^{\\rho}_{\\sigma\\mu\\nu} + \\nabla_\\alpha \\nabla_\\beta \\nabla_\\gamma \\nabla_\\delta \\Phi_{\\lambda\\rho\\sigma\\mu\\nu} + \\Lambda g_{\\mu\\nu} + \\frac{8\\pi G}{c^4}T_{\\mu\\nu} + \\mathcal{A}_{\\alpha\\beta\\gamma\\delta} + \\mathcal{B}^{\\lambda\\rho}_{\\sigma\\mu\\nu} + \\sum_{n=1}^{100} \\frac{n^2 + \\alpha_n}{n^3 + \\beta_n} + \\prod_{k=1}^{20} \\left(1 + \\frac{x_k}{r^2}\\right) + \\int_0^\\infty e^{-\\omega r} \\, d\\omega + \\operatorname{diag}(g_{00}, g_{11}, g_{22}, g_{33})',
+  '$$',
   '',
   'Double escaped display bracket:',
   '\\\\[',
@@ -227,6 +234,21 @@ async function paneState(frame) {
       return parts.join('\n');
     }
 
+    function mathScrollerState(root) {
+      return Array.from(root.querySelectorAll('.katex-display, eq > .katex')).map((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          selector: element.classList.contains('katex-display') ? '.katex-display' : 'eq > .katex',
+          width: rect.width,
+          scrollLeft: element.scrollLeft,
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+          overflowX: style.overflowX,
+        };
+      });
+    }
+
     return {
       mode: document.getElementById('editor-container').className,
       editorValue: editor.value,
@@ -234,6 +256,7 @@ async function paneState(frame) {
       previewText: preview.textContent,
       previewHtml: preview.innerHTML,
       plainTextOutsideKatex: plainTextOutsideKatex(preview),
+      mathScrollers: mathScrollerState(preview),
       editor: {
         width: editorRect.width,
         height: editorRect.height,
@@ -247,7 +270,10 @@ async function paneState(frame) {
         height: previewRect.height,
         scrollTop: preview.scrollTop,
         scrollHeight: preview.scrollHeight,
+        scrollWidth: preview.scrollWidth,
         clientHeight: preview.clientHeight,
+        clientWidth: preview.clientWidth,
+        overflowX: previewStyle.overflowX,
         overflowY: previewStyle.overflowY,
       },
     };
@@ -336,7 +362,72 @@ function assertPreviewHasMath(state, label) {
   assert(state.preview.width > 100, `${label} preview should be visible`);
   assert(state.preview.height > 100, `${label} preview should have height`);
   assert(state.preview.scrollHeight > state.preview.clientHeight, `${label} preview should be scrollable`);
-  assert(state.preview.overflowY === 'auto' || state.preview.overflowY === 'scroll', `${label} preview overflow should allow scrolling`);
+  assert(state.preview.overflowY === 'auto' || state.preview.overflowY === 'scroll', `${label} preview overflow should allow vertical scrolling`);
+}
+
+function assertNoPreviewHorizontalOverflow(state, label) {
+  assert(
+    state.preview.scrollWidth <= state.preview.clientWidth + 1,
+    `${label} preview should not have page-level horizontal overflow: scrollWidth ${state.preview.scrollWidth}, clientWidth ${state.preview.clientWidth}`
+  );
+  assert(
+    state.preview.overflowX === 'hidden' || state.preview.overflowX === 'clip',
+    `${label} preview overflow-x should hide page-level horizontal scrolling, got ${state.preview.overflowX}`
+  );
+}
+
+function overflowingMathScroller(state, selector) {
+  return state.mathScrollers.find((item) => {
+    return item.selector === selector && item.scrollWidth > item.clientWidth + 1;
+  });
+}
+
+function assertLocalMathScroller(state, label, selector) {
+  const scroller = overflowingMathScroller(state, selector);
+  assert(scroller, `${label} should have an oversized ${selector} math item with local horizontal overflow`);
+  assert(
+    scroller.overflowX === 'auto' || scroller.overflowX === 'scroll',
+    `${label} oversized ${selector} math item should allow horizontal scrolling, got ${scroller.overflowX}`
+  );
+}
+
+async function scrollFirstOverflowingMath(frame, selector) {
+  return frame.evaluate((targetSelector) => {
+    const scroller = Array.from(document.querySelectorAll(`#preview ${targetSelector}`))
+      .find((element) => element.scrollWidth > element.clientWidth + 1);
+
+    if (!scroller) {
+      return null;
+    }
+
+    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    scroller.scrollLeft = maxScrollLeft;
+
+    return {
+      selector: targetSelector,
+      scrollLeft: scroller.scrollLeft,
+      maxScrollLeft,
+      scrollWidth: scroller.scrollWidth,
+      clientWidth: scroller.clientWidth,
+    };
+  }, selector);
+}
+
+function assertMathCanScroll(scrollState, label, selector) {
+  assert(scrollState, `${label} should find an overflowing ${selector} math item`);
+  assert(scrollState.maxScrollLeft > 0, `${label} ${selector} should have horizontal scroll distance`);
+  assert(scrollState.scrollLeft > 0, `${label} ${selector} should scroll horizontally when moved`);
+}
+
+function assertMathOverflowBehavior(state, label) {
+  assertNoPreviewHorizontalOverflow(state, label);
+  assertLocalMathScroller(state, label, '.katex-display');
+  assertLocalMathScroller(state, label, 'eq > .katex');
+}
+
+async function assertMathScrollsLocally(frame, label) {
+  assertMathCanScroll(await scrollFirstOverflowingMath(frame, '.katex-display'), label, '.katex-display');
+  assertMathCanScroll(await scrollFirstOverflowingMath(frame, 'eq > .katex'), label, 'eq > .katex');
 }
 
 (async () => {
@@ -363,6 +454,8 @@ function assertPreviewHasMath(state, label) {
     await clickMode(frame, 'Preview');
     const preview = await paneState(frame);
     assertPreviewHasMath(preview, 'Preview mode');
+    assertMathOverflowBehavior(preview, 'Preview mode');
+    await assertMathScrollsLocally(frame, 'Preview mode');
     assertScrollRatioClose(preview.preview, editSourceRatio, 'Edit to Preview');
 
     const previewSourceRatio = 0.34;
@@ -371,6 +464,8 @@ function assertPreviewHasMath(state, label) {
     await clickMode(frame, 'Split');
     const split = await paneState(frame);
     assertPreviewHasMath(split, 'Split mode');
+    assertMathOverflowBehavior(split, 'Split mode');
+    await assertMathScrollsLocally(frame, 'Split mode');
     assert(split.editor.width > 100, 'Split mode editor should be visible');
     assert(split.editor.scrollHeight > split.editor.clientHeight, 'Split mode editor should be scrollable');
     assert(split.editor.overflowY === 'auto' || split.editor.overflowY === 'scroll', 'Split mode editor overflow should allow scrolling');
@@ -396,7 +491,7 @@ function assertPreviewHasMath(state, label) {
     const saveCountAfterTextEdit = await saveItemMessageCount(page);
     assert(saveCountAfterTextEdit > saveCountAfterModeClicks, 'Text input should still send save-items messages');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, and panes are scrollable.');
+    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, and oversized math scrolls locally.');
   } finally {
     await browser.close();
     server.close();
