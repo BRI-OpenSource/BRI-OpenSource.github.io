@@ -162,6 +162,18 @@ function assertScrollbarCss() {
   expectIncludes(preview, 'flex: 1;', 'preview CSS');
   assert(!/&\.edit\s*\{[^}]*display:\s*none/s.test(preview), 'preview edit mode should not use display:none');
 
+  const modeButtons = blockFor(scss, '.buttons {');
+  expectIncludes(modeButtons, 'overflow: hidden;', 'mode buttons CSS');
+  expectIncludes(modeButtons, 'border-radius: 999px;', 'mode buttons CSS');
+  expectIncludes(modeButtons, '-webkit-backdrop-filter: blur(12px);', 'mode buttons CSS');
+  expectIncludes(modeButtons, 'backdrop-filter: blur(12px);', 'mode buttons CSS');
+
+  const modeButton = blockFor(modeButtons, '.button {');
+  expectIncludes(modeButton, 'margin-right: 0;', 'mode button CSS');
+  expectIncludes(modeButton, 'border-right: 1px solid var(--sn-component-inner-border-color);', 'mode button CSS');
+  expectIncludes(modeButton, '&:first-child', 'mode button CSS');
+  expectIncludes(modeButton, '&:last-child', 'mode button CSS');
+
   const previewH1 = blockFor(preview, 'h1 {');
   expectIncludes(previewH1, 'font-size: 1.65em;', 'preview h1 CSS');
 
