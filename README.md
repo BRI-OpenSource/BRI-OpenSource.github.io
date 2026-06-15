@@ -1,1 +1,1 @@
-# BRI-OpenSource.github.io
+# Open-Source Markdown Math Rendering Engine
