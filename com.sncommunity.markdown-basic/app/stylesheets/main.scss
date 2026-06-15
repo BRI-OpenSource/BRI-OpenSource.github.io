@@ -13,17 +13,6 @@ body, html {
   background-color: transparent;
 }
 
-body > div,
-body > div > div {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-}
-
-body > div > div {
-  display: flex;
-}
-
 * {
   // To prevent gray flash when focusing input on mobile Safari
   -webkit-tap-highlight-color: rgba(0,0,0,0);
@@ -48,7 +37,7 @@ body > div > div {
 }
 
 #editor-container {
-  flex: 1 1 auto;
+  flex-grow: 1;
   min-height: 0;
   display: flex;
   flex-direction: row;
@@ -58,7 +47,6 @@ body > div > div {
 #editor,
 #preview {
   box-sizing: border-box;
-  height: 100%;
   min-height: 0;
   min-width: 0;
   overflow: auto;
@@ -88,26 +76,22 @@ body > div > div {
   font-size: var(--sn-stylekit-font-size-editor);
   -webkit-overflow-scrolling: touch;
   font-family: var(--sn-stylekit-sans-serif-font);
-  flex: 0 0 auto;
 
   &.edit {
-    flex: 1 1 auto;
     width: 100% !important;
   }
 
   &.split {
-    flex: 0 0 auto;
     width: calc(50% - 4px);
   }
 
   &.preview {
-    display: none;
-    flex: 0 0 0;
     width: 0 !important;
     padding: 0;
     padding-left: 0;
   }
 
+  flex-grow: 0;
   border: 0px;
   outline: 0;
   resize: none;
@@ -115,7 +99,6 @@ body > div > div {
 }
 
 #column-resizer {
-  flex: 0 0 8px;
   width: 8px;
   background-color: var(--sn-stylekit-border-color);
   cursor: col-resize;
@@ -133,7 +116,6 @@ body > div > div {
   padding: 12px;
   padding-top: 0;
   font-family: var(--sn-stylekit-sans-serif-font);
-  flex: 1 1 auto;
 
   // To align top with textarea.
   margin-top: -4px;
@@ -144,21 +126,17 @@ body > div > div {
   color: var(--sn-stylekit-foreground-color);
 
   &.edit {
-    display: none;
-    flex: 0 0 0;
     width: 0 !important;
     padding: 0;
     padding-left: 0;
   }
 
   &.split {
-    flex: 1 1 0;
-    width: auto;
+    width: calc(50% - 4px);
   }
 
   &.preview {
-    flex: 1 1 auto;
-    width: auto !important;
+    width: 100% !important;
   }
 
   img {
@@ -170,6 +148,8 @@ body > div > div {
     list-style-type: none;
   }
 
+  overflow: auto;
+  flex: 1;
   word-wrap: break-word;
 
   a {
