@@ -162,6 +162,12 @@ function assertScrollbarCss() {
   expectIncludes(preview, 'flex: 1;', 'preview CSS');
   assert(!/&\.edit\s*\{[^}]*display:\s*none/s.test(preview), 'preview edit mode should not use display:none');
 
+  const previewH1 = blockFor(preview, 'h1 {');
+  expectIncludes(previewH1, 'font-size: 1.6em;', 'preview h1 CSS');
+
+  const previewH2 = blockFor(preview, 'h2 {');
+  expectIncludes(previewH2, 'font-size: 1.35em;', 'preview h2 CSS');
+
   const mathWrapperSelector = 'section,\n  eq,\n  eqn';
   const mathWrapper = blockFor(preview, mathWrapperSelector);
   expectIncludes(mathWrapper, 'max-width: 100%;', 'math wrapper CSS');
