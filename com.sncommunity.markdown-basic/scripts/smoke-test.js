@@ -4,6 +4,7 @@ const assert = require('assert');
 const MarkdownIt = require('markdown-it');
 const texmath = require('markdown-it-texmath');
 const katex = require('katex');
+const normalizeMathDelimiters = require('../app/lib/normalizeMathDelimiters');
 
 const root = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(root, '..');
@@ -67,11 +68,17 @@ function assertKatexRendering() {
     ['inline dollar math', 'Inline $E = mc^2$ done'],
     ['display dollar math', '$$\na^2 + b^2 = c^2\n$$'],
     ['inline bracket math', '\\(E = mc^2\\)'],
-    ['display bracket math', '\\[a^2 + b^2 = c^2\\]'],
+    ['single-line display bracket math', '\\[a^2 + b^2 = c^2\\]'],
+    ['multiline display bracket math', '\\[\na^2 + b^2 = c^2\n\\]'],
+    ['spaced inline dollar math', 'Inline $ E = mc^2 $ done'],
+    ['escaped inline dollar math', 'Inline \\$F = ma\\$ done'],
+    ['escaped display dollar math', '\\$\\$\na^2 + b^2 = c^2\n\\$\\$'],
+    ['double escaped inline bracket math', '\\\\(E = mc^2\\\\)'],
+    ['double escaped display bracket math', '\\\\[\na^2 + b^2 = c^2\n\\\\]'],
   ];
 
   for (const [label, input] of samples) {
-    const html = markdown.render(input);
+    const html = markdown.render(normalizeMathDelimiters(input));
     expectIncludes(html, 'class="katex', label);
   }
 }
@@ -80,7 +87,8 @@ function assertCacheVersions() {
   const pkg = JSON.parse(read('package.json'));
   const version = pkg.version;
   assert(/^\d+\.\d+\.\d+$/.test(version), 'package version should be semver-like');
-  assert.strictEqual(pkg.scripts.smoke, 'node scripts/smoke-test.js');
+  expectIncludes(pkg.scripts.smoke, 'node scripts/smoke-test.js', 'package smoke script');
+  expectIncludes(pkg.scripts.smoke, 'node scripts/browser-smoke-test.js', 'package smoke script');
 
   const lock = JSON.parse(read('package-lock.json'));
   assert.strictEqual(lock.version, version, 'package-lock root version should match package.json');

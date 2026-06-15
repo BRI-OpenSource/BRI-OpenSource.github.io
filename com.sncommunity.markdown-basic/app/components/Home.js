@@ -3,6 +3,7 @@ import ComponentRelay from '@standardnotes/component-relay';
 const MarkdownIt = require('markdown-it');
 const texmath = require('markdown-it-texmath');
 const katex = require('katex');
+const normalizeMathDelimiters = require('../lib/normalizeMathDelimiters');
 
 const EditMode = 0;
 const SplitMode = 1;
@@ -122,7 +123,7 @@ export default class Home extends React.Component {
       }
 
       this.editor.value = note.content.text;
-      this.preview.innerHTML = this.markdown.render(note.content.text);
+      this.preview.innerHTML = this.renderMarkdown(note.content.text);
 
       document.getElementById('editor').setAttribute(
         'spellcheck',
@@ -142,9 +143,13 @@ export default class Home extends React.Component {
     }
   }
 
+  renderMarkdown(text) {
+    return this.markdown.render(normalizeMathDelimiters(text));
+  }
+
   updatePreviewText() {
     const text = this.editor.value || '';
-    this.preview.innerHTML = this.markdown.render(text);
+    this.preview.innerHTML = this.renderMarkdown(text);
     return text;
   }
 

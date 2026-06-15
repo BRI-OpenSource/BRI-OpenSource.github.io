@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.7.15",
+  "version": "1.7.16",
   "repository": {
     "type": "git",
     "url": "https://github.com/standardnotes/plugins",
@@ -16,7 +16,7 @@
     "lint": "eslint --cache --ext .jsx,.js --format=node_modules/eslint-formatter-pretty .",
     "lint:fix": "eslint --cache --ext .jsx,.js --format=node_modules/eslint-formatter-pretty .",
     "build": "webpack",
-    "smoke": "node scripts/smoke-test.js",
+    "smoke": "node scripts/smoke-test.js && node scripts/browser-smoke-test.js",
     "start": "webpack-dev-server --devtool eval --progress --port 8001 --hot --content-base app",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s -r 1",
     "test": "echo \"Error: no test specified\" && exit 0"
@@ -61,6 +61,7 @@
     "markdown-it-task-lists": "^2.1.1",
     "markdown-it-texmath": "^1.0.0",
     "mini-css-extract-plugin": "^0.10.0",
+    "puppeteer-core": "^25.1.0",
     "react": "16.x",
     "react-dom": "16.x",
     "sass": "^1.52.3",
