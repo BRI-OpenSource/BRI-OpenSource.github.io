@@ -3,7 +3,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "1.7.21",
+  "version": "1.7.22",
   "repository": {
     "type": "git",
     "url": "https://github.com/standardnotes/plugins",

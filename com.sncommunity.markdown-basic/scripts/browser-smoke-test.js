@@ -61,6 +61,12 @@ const noteText = [
   ...Array.from({ length: 80 }, (_, index) => `Scrollable line ${index + 1}: $x_${index + 1}^2$`),
 ].join('\n');
 
+const otherNoteText = [
+  '# Other Note',
+  '',
+  'This note has its own local mode storage: $z^2$.',
+].join('\n');
+
 function findChromeExecutable() {
   const candidates = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
@@ -103,9 +109,68 @@ function harnessHtml() {
 <body>
   <iframe id="plugin" src="/dist/index.html"></iframe>
   <script>
-    const noteText = ${JSON.stringify(noteText)};
-    const iframe = document.getElementById('plugin');
+    const notes = {
+      'note-1': {
+        uuid: 'note-1',
+        isMetadataUpdate: false,
+        content: {
+          text: ${JSON.stringify(noteText)},
+          spellcheck: true
+        }
+      },
+      'note-2': {
+        uuid: 'note-2',
+        isMetadataUpdate: false,
+        content: {
+          text: ${JSON.stringify(otherNoteText)},
+          spellcheck: true
+        }
+      }
+    };
+
+    let currentNoteId = 'note-1';
+    let iframe = document.getElementById('plugin');
     window.pluginMessages = [];
+
+    window.setCurrentNoteId = (noteId) => {
+      if (!notes[noteId]) {
+        throw new Error('Unknown smoke note: ' + noteId);
+      }
+      currentNoteId = noteId;
+    };
+
+    window.reloadPluginForNote = (noteId) => {
+      window.setCurrentNoteId(noteId);
+      return new Promise((resolve) => {
+        const nextIframe = document.createElement('iframe');
+        nextIframe.id = 'plugin';
+        nextIframe.src = '/dist/index.html?reload=' + Date.now() + '-' + Math.random();
+        nextIframe.addEventListener('load', () => {
+          iframe = nextIframe;
+          registerComponent(nextIframe);
+          resolve();
+        }, { once: true });
+        iframe.replaceWith(nextIframe);
+      });
+    };
+
+    function currentNote() {
+      return JSON.parse(JSON.stringify(notes[currentNoteId]));
+    }
+
+    function registerComponent(targetIframe) {
+      targetIframe.contentWindow.postMessage({
+        action: 'component-registered',
+        sessionKey: 'browser-smoke-session',
+        componentData: {},
+        data: {
+          environment: 'web',
+          platform: 'web',
+          uuid: 'component-1',
+          activeThemeUrls: []
+        }
+      }, window.location.origin);
+    }
 
     window.addEventListener('message', (event) => {
       const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
@@ -120,15 +185,7 @@ function harnessHtml() {
           action: 'reply',
           original: { messageId: message.messageId },
           data: {
-            item: {
-              uuid: 'note-1',
-              clientData: { mode: 0 },
-              isMetadataUpdate: false,
-              content: {
-                text: noteText,
-                spellcheck: true
-              }
-            }
+            item: currentNote()
           }
         }, event.origin);
       }
@@ -143,17 +200,7 @@ function harnessHtml() {
     });
 
     iframe.addEventListener('load', () => {
-      iframe.contentWindow.postMessage({
-        action: 'component-registered',
-        sessionKey: 'browser-smoke-session',
-        componentData: {},
-        data: {
-          environment: 'web',
-          platform: 'web',
-          uuid: 'component-1',
-          activeThemeUrls: []
-        }
-      }, window.location.origin);
+      registerComponent(iframe);
     });
   </script>
 </body>
@@ -296,6 +343,27 @@ async function saveItemMessageCount(page) {
   return page.evaluate(() => {
     return window.pluginMessages.filter((message) => message && message.action === 'save-items').length;
   });
+}
+
+async function storedModeForNote(page, noteId) {
+  return page.evaluate((targetNoteId) => {
+    return window.localStorage.getItem(`snlatex.mode.${targetNoteId}`);
+  }, noteId);
+}
+
+async function reloadPluginForNote(page, noteId) {
+  await page.evaluate((targetNoteId) => window.reloadPluginForNote(targetNoteId), noteId);
+  const iframe = await page.waitForSelector('#plugin');
+  const frame = await iframe.contentFrame();
+  await frame.waitForSelector('#editor-container', { timeout: 10000 });
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  return frame;
+}
+
+async function waitForEditorValue(frame, expectedText) {
+  await frame.waitForFunction((text) => {
+    return document.getElementById('editor').value === text;
+  }, { timeout: 10000 }, expectedText);
 }
 
 async function appendEditorText(frame, text) {
@@ -445,7 +513,9 @@ async function assertMathScrollsLocally(frame, label) {
     await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
 
     const frame = await page.waitForFrame((candidate) => candidate.url().includes('/dist/index.html'));
+    await waitForEditorValue(frame, noteText);
     await frame.waitForSelector('#preview .katex', { timeout: 10000 });
+    assert.strictEqual(await storedModeForNote(page, 'note-1'), null, 'Fresh note should not start with stored local mode');
     const saveCountBeforeModeClicks = await saveItemMessageCount(page);
 
     const editSourceRatio = 0.58;
@@ -491,7 +561,29 @@ async function assertMathScrollsLocally(frame, label) {
     const saveCountAfterTextEdit = await saveItemMessageCount(page);
     assert(saveCountAfterTextEdit > saveCountAfterModeClicks, 'Text input should still send save-items messages');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, and oversized math scrolls locally.');
+    await clickMode(frame, 'Preview');
+    const saveCountAfterRememberedModeClick = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterRememberedModeClick, saveCountAfterTextEdit, 'Remembered mode click should not send save-items messages');
+    assert.strictEqual(await storedModeForNote(page, 'note-1'), '2', 'Preview mode should be stored locally by note UUID');
+
+    const restoredFrame = await reloadPluginForNote(page, 'note-1');
+    await waitForEditorValue(restoredFrame, noteText);
+    const restored = await paneState(restoredFrame);
+    assert.strictEqual(restored.mode, 'preview', 'Reopened note should restore its local remembered Preview mode');
+    assertPreviewHasMath(restored, 'Reopened Preview mode');
+    assertMathOverflowBehavior(restored, 'Reopened Preview mode');
+    await assertMathScrollsLocally(restoredFrame, 'Reopened Preview mode');
+
+    const otherFrame = await reloadPluginForNote(page, 'note-2');
+    await waitForEditorValue(otherFrame, otherNoteText);
+    const other = await paneState(otherFrame);
+    assert.strictEqual(other.mode, 'edit', 'Different note should not inherit another note\'s remembered local mode');
+    assert.strictEqual(await storedModeForNote(page, 'note-2'), null, 'Different note should not get a stored mode until it is changed');
+
+    const saveCountAfterModeRestores = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterModeRestores, saveCountAfterRememberedModeClick, 'Restoring local modes should not send save-items messages');
+
+    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and per-note local mode restore works.');
   } finally {
     await browser.close();
     server.close();
