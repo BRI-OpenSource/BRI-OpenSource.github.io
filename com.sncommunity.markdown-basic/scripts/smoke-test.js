@@ -163,7 +163,7 @@ function assertScrollbarCss() {
   assert(!/&\.edit\s*\{[^}]*display:\s*none/s.test(preview), 'preview edit mode should not use display:none');
 
   const previewH1 = blockFor(preview, 'h1 {');
-  expectIncludes(previewH1, 'font-size: 1.6em;', 'preview h1 CSS');
+  expectIncludes(previewH1, 'font-size: 1.65em;', 'preview h1 CSS');
 
   const previewH2 = blockFor(preview, 'h2 {');
   expectIncludes(previewH2, 'font-size: 1.45em;', 'preview h2 CSS');

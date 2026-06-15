@@ -61,11 +61,7 @@ const noteText = [
   ...Array.from({ length: 80 }, (_, index) => `Scrollable line ${index + 1}: $x_${index + 1}^2$`),
 ].join('\n');
 
-const otherNoteText = [
-  '# Other Note',
-  '',
-  'This note has its own local mode storage: $z^2$.',
-].join('\n');
+const emptyNoteText = '';
 
 function findChromeExecutable() {
   const candidates = [
@@ -122,8 +118,8 @@ function harnessHtml() {
         uuid: 'note-2',
         isMetadataUpdate: false,
         content: {
-          text: ${JSON.stringify(otherNoteText)},
-          spellcheck: true
+          text: ${JSON.stringify(emptyNoteText)},
+          spellcheck: false
         }
       }
     };
@@ -345,10 +341,10 @@ async function saveItemMessageCount(page) {
   });
 }
 
-async function storedModeForNote(page, noteId) {
-  return page.evaluate((targetNoteId) => {
-    return window.localStorage.getItem(`snlatex.mode.${targetNoteId}`);
-  }, noteId);
+async function setStaleStoredModeForNote(page, noteId, modeValue) {
+  await page.evaluate(({ targetNoteId, targetModeValue }) => {
+    window.localStorage.setItem(`snlatex.mode.${targetNoteId}`, String(targetModeValue));
+  }, { targetNoteId: noteId, targetModeValue: modeValue });
 }
 
 async function reloadPluginForNote(page, noteId) {
@@ -364,6 +360,12 @@ async function waitForEditorValue(frame, expectedText) {
   await frame.waitForFunction((text) => {
     return document.getElementById('editor').value === text;
   }, { timeout: 10000 }, expectedText);
+}
+
+async function waitForEditorSpellcheck(frame, expectedValue) {
+  await frame.waitForFunction((value) => {
+    return document.getElementById('editor').getAttribute('spellcheck') === value;
+  }, { timeout: 10000 }, expectedValue);
 }
 
 async function appendEditorText(frame, text) {
@@ -515,8 +517,18 @@ async function assertMathScrollsLocally(frame, label) {
     const frame = await page.waitForFrame((candidate) => candidate.url().includes('/dist/index.html'));
     await waitForEditorValue(frame, noteText);
     await frame.waitForSelector('#preview .katex', { timeout: 10000 });
-    assert.strictEqual(await storedModeForNote(page, 'note-1'), null, 'Fresh note should not start with stored local mode');
+    const initialPreview = await paneState(frame);
+    assert.strictEqual(initialPreview.mode, 'preview', 'Non-empty note should default to Preview mode');
+    assertPreviewHasMath(initialPreview, 'Initial Preview mode');
+    assertMathOverflowBehavior(initialPreview, 'Initial Preview mode');
+    await assertMathScrollsLocally(frame, 'Initial Preview mode');
     const saveCountBeforeModeClicks = await saveItemMessageCount(page);
+
+    await clickMode(frame, 'Edit');
+    const initialEdit = await paneState(frame);
+    assert(initialEdit.editor.width > 100, 'Edit mode editor should be visible after switching from default Preview');
+    assert(initialEdit.editor.scrollHeight > initialEdit.editor.clientHeight, 'Edit mode editor should be scrollable after switching from default Preview');
+    assert(initialEdit.editor.overflowY === 'auto' || initialEdit.editor.overflowY === 'scroll', 'Edit mode editor overflow should allow scrolling after switching from default Preview');
 
     const editSourceRatio = 0.58;
     await setPaneScroll(frame, 'editor', editSourceRatio);
@@ -562,28 +574,29 @@ async function assertMathScrollsLocally(frame, label) {
     assert(saveCountAfterTextEdit > saveCountAfterModeClicks, 'Text input should still send save-items messages');
 
     await clickMode(frame, 'Preview');
-    const saveCountAfterRememberedModeClick = await saveItemMessageCount(page);
-    assert.strictEqual(saveCountAfterRememberedModeClick, saveCountAfterTextEdit, 'Remembered mode click should not send save-items messages');
-    assert.strictEqual(await storedModeForNote(page, 'note-1'), '2', 'Preview mode should be stored locally by note UUID');
+    const saveCountAfterFinalModeClick = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterFinalModeClick, saveCountAfterTextEdit, 'Final mode click should not send save-items messages');
 
+    await setStaleStoredModeForNote(page, 'note-1', 0);
     const restoredFrame = await reloadPluginForNote(page, 'note-1');
     await waitForEditorValue(restoredFrame, noteText);
     const restored = await paneState(restoredFrame);
-    assert.strictEqual(restored.mode, 'preview', 'Reopened note should restore its local remembered Preview mode');
-    assertPreviewHasMath(restored, 'Reopened Preview mode');
-    assertMathOverflowBehavior(restored, 'Reopened Preview mode');
-    await assertMathScrollsLocally(restoredFrame, 'Reopened Preview mode');
+    assert.strictEqual(restored.mode, 'preview', 'Reopened non-empty note should default to Preview even when stale local mode says Edit');
+    assertPreviewHasMath(restored, 'Reopened default Preview mode');
+    assertMathOverflowBehavior(restored, 'Reopened default Preview mode');
+    await assertMathScrollsLocally(restoredFrame, 'Reopened default Preview mode');
 
-    const otherFrame = await reloadPluginForNote(page, 'note-2');
-    await waitForEditorValue(otherFrame, otherNoteText);
-    const other = await paneState(otherFrame);
-    assert.strictEqual(other.mode, 'edit', 'Different note should not inherit another note\'s remembered local mode');
-    assert.strictEqual(await storedModeForNote(page, 'note-2'), null, 'Different note should not get a stored mode until it is changed');
+    await setStaleStoredModeForNote(page, 'note-2', 2);
+    const emptyFrame = await reloadPluginForNote(page, 'note-2');
+    await waitForEditorSpellcheck(emptyFrame, 'false');
+    const empty = await paneState(emptyFrame);
+    assert.strictEqual(empty.editorValue, emptyNoteText, 'Empty note should load empty editor text');
+    assert.strictEqual(empty.mode, 'edit', 'Empty note should default to Edit even when stale local mode says Preview');
 
-    const saveCountAfterModeRestores = await saveItemMessageCount(page);
-    assert.strictEqual(saveCountAfterModeRestores, saveCountAfterRememberedModeClick, 'Restoring local modes should not send save-items messages');
+    const saveCountAfterDefaultModeLoads = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterDefaultModeLoads, saveCountAfterFinalModeClick, 'Default mode selection should not send save-items messages');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and per-note local mode restore works.');
+    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and content-based default modes work.');
   } finally {
     await browser.close();
     server.close();

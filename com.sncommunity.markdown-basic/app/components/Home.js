@@ -21,6 +21,7 @@ export default class Home extends React.Component {
     ];
 
     this.state = { mode: this.modes[0] };
+    this.modeInitializedForNoteUuid = null;
   }
 
   componentDidMount() {
@@ -46,50 +47,9 @@ export default class Home extends React.Component {
     }
   }
 
-  modeStorageKey(note) {
-    if (!note || !note.uuid) {
-      return null;
-    }
-
-    return `snlatex.mode.${note.uuid}`;
-  }
-
-  modeStorage() {
-    try {
-      return window.localStorage;
-    } catch (_error) {
-      return null;
-    }
-  }
-
-  loadStoredMode(note) {
-    const key = this.modeStorageKey(note);
-    const storage = this.modeStorage();
-    if (!key || !storage) {
-      return EditMode;
-    }
-
-    try {
-      const value = storage.getItem(key);
-      const modeValue = value === null ? EditMode : Number(value);
-      return this.modes.some((mode) => mode.mode === modeValue) ? modeValue : EditMode;
-    } catch (_error) {
-      return EditMode;
-    }
-  }
-
-  storeMode(mode) {
-    const key = this.modeStorageKey(this.note);
-    const storage = this.modeStorage();
-    if (!key || !storage) {
-      return;
-    }
-
-    try {
-      storage.setItem(key, String(mode.mode));
-    } catch (_error) {
-      // Local mode persistence is best-effort; note content must never depend on it.
-    }
+  defaultModeForNote(note) {
+    const text = note && note.content ? note.content.text : '';
+    return text && text.trim().length > 0 ? PreviewMode : EditMode;
   }
 
   scrollRatioForElement(element) {
@@ -164,7 +124,6 @@ export default class Home extends React.Component {
       this.updatePreviewText();
       this.applyScrollRatioAfterLayout(mode, scrollRatio);
     });
-    this.storeMode(mode);
   }
 
   configureMarkdown() {
@@ -222,13 +181,17 @@ export default class Home extends React.Component {
     });
 
     this.componentRelay.streamContextItem((note) => {
+      const noteUuid = note && note.uuid;
       this.note = note;
-
-      this.setModeFromModeValue(this.loadStoredMode(note));
 
       // Only update UI on non-metadata updates.
       if (note.isMetadataUpdate) {
         return;
+      }
+
+      if (this.modeInitializedForNoteUuid !== noteUuid) {
+        this.setModeFromModeValue(this.defaultModeForNote(note));
+        this.modeInitializedForNoteUuid = noteUuid;
       }
 
       this.editor.value = note.content.text;
