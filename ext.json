@@ -1,0 +1,10 @@
+{
+  "identifier": "org.bri-opensource.snlatex",
+  "name": "SNLATEX Markdown",
+  "content_type": "SN|Component",
+  "area": "editor-editor",
+  "version": "1.7.13",
+  "description": "A Markdown editor for Standard Notes with KaTeX and LaTeX math preview support.",
+  "url": "https://bri-opensource.github.io/com.sncommunity.markdown-basic/dist/index.html",
+  "thumbnail_url": "https://bri-opensource.github.io/com.sncommunity.markdown-basic/favicon.ico"
+}
