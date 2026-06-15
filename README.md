@@ -1,5 +1,12 @@
 # SNLATEX Markdown Editor
 
+<div align="center">
+
+[![License](https://img.shields.io/github/license/sn-extensions/markdown-basic?color=blue)](https://github.com/sn-extensions/markdown-basic/blob/master/LICENSE)
+[![Slack](https://img.shields.io/badge/slack-standardnotes-CC2B5E.svg?style=flat&logo=slack)](https://standardnotes.org/slack)
+
+</div>
+
 SNLATEX is a public Standard Notes editor plugin for writing Markdown with live preview and KaTeX-powered LaTeX math rendering.
 
 It is based on the Standard Notes community Basic Markdown editor and adds support for common math syntax used by AI tools and technical notes, including inline math and display math.
