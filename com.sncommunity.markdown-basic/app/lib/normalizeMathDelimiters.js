@@ -1,8 +1,11 @@
-function normalizeMathDelimiters(text) {
-  if (!text) {
-    return '';
-  }
+const FENCE_PATTERN = /^\s{0,3}(```|~~~)/;
+const MATH_BLOCK_DELIMITER_PATTERN = /^\s*\$\$\s*$/;
+const MARKDOWN_BLOCK_PATTERN = /^\s{0,3}(?:#{1,6}\s|[-+*]\s|\d+\.\s|>\s|\|)/;
+const LATEX_COMMAND_PATTERN = /\\(?:frac|tfrac|dfrac|sqrt|sum|prod|int|oint|lim|partial|nabla|Gamma|Delta|Lambda|Omega|Sigma|alpha|beta|gamma|delta|epsilon|varepsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|varphi|pi|psi|chi|eta|kappa|xi|zeta|left|right|cdot|times|qquad|quad|equiv|approx|leq|geq|neq|to|mapsto|infty|mathrm|mathbf|mathbb|mathcal|text|begin|end)\b/;
+const SCRIPT_PATTERN = /[A-Za-z0-9)}](?:[_^](?:\{[^}\n]+\}|\\?[A-Za-z]+|[0-9]))/;
+const OPERATOR_PATTERN = /(?:=|\\equiv|\\approx|\\leq|\\geq|\\neq|\\to|\\mapsto|[+\-*/])/;
 
+function normalizeExplicitMathDelimiters(text) {
   return text
     .replace(/(^|\n)([ \t]*)\\\$\\\$([\s\S]*?)(^|\n)([ \t]*)\\\$\\\$/gm, (_match, openLine, openIndent, body, closeLine, closeIndent) => {
       return `${openLine}${openIndent}$$${body}${closeLine}${closeIndent}$$`;
@@ -22,6 +25,90 @@ function normalizeMathDelimiters(text) {
     .replace(/(^|[\s([{])\\\\\(([^\n]+?)\\\\\)(?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
       return `${prefix}\\(${body}\\)`;
     });
+}
+
+function isProbableStandaloneTexLine(line, continuingBlock) {
+  const trimmed = line.trim();
+
+  if (!trimmed || trimmed.includes('`') || MARKDOWN_BLOCK_PATTERN.test(trimmed)) {
+    return false;
+  }
+
+  const hasLatexCommand = LATEX_COMMAND_PATTERN.test(trimmed);
+  const hasScript = SCRIPT_PATTERN.test(trimmed);
+  const hasOperator = OPERATOR_PATTERN.test(trimmed);
+
+  if (continuingBlock && hasLatexCommand) {
+    return true;
+  }
+
+  return (hasLatexCommand && (hasScript || hasOperator)) || (hasScript && hasOperator);
+}
+
+function wrapStandaloneTexBlocks(text) {
+  const lines = text.split('\n');
+  const normalized = [];
+  let pendingTexLines = [];
+  let inFence = false;
+  let inMathBlock = false;
+
+  function flushPendingTexBlock() {
+    if (!pendingTexLines.length) {
+      return;
+    }
+
+    normalized.push('$$');
+    for (const line of pendingTexLines) {
+      normalized.push(line.trim());
+    }
+    normalized.push('$$');
+    pendingTexLines = [];
+  }
+
+  for (const line of lines) {
+    if (FENCE_PATTERN.test(line)) {
+      flushPendingTexBlock();
+      normalized.push(line);
+      inFence = !inFence;
+      continue;
+    }
+
+    if (inFence) {
+      normalized.push(line);
+      continue;
+    }
+
+    if (MATH_BLOCK_DELIMITER_PATTERN.test(line)) {
+      flushPendingTexBlock();
+      normalized.push(line);
+      inMathBlock = !inMathBlock;
+      continue;
+    }
+
+    if (inMathBlock) {
+      normalized.push(line);
+      continue;
+    }
+
+    if (isProbableStandaloneTexLine(line, pendingTexLines.length > 0)) {
+      pendingTexLines.push(line);
+      continue;
+    }
+
+    flushPendingTexBlock();
+    normalized.push(line);
+  }
+
+  flushPendingTexBlock();
+  return normalized.join('\n');
+}
+
+function normalizeMathDelimiters(text) {
+  if (!text) {
+    return '';
+  }
+
+  return wrapStandaloneTexBlocks(normalizeExplicitMathDelimiters(text));
 }
 
 module.exports = normalizeMathDelimiters;

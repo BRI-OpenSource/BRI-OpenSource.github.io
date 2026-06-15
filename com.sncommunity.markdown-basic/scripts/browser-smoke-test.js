@@ -36,6 +36,17 @@ const noteText = [
   '\\sum_{n=1}^{10} n = 55',
   '\\\\]',
   '',
+  'Bare Einstein tensor:',
+  'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}',
+  '',
+  'Bare Ricci tensor:',
+  'R_{\\mu\\nu} \\equiv R^{\\alpha}{}_{\\mu\\alpha\\nu}, \\qquad R = g^{\\mu\\nu} R_{\\mu\\nu}',
+  '',
+  'Bare Christoffel block:',
+  '\\Gamma^{\\lambda}_{\\mu\\nu} = \\tfrac{1}{2} g^{\\lambda\\sigma}\\left(',
+  '\\partial_\\mu g_{\\nu\\sigma} + \\partial_\\nu g_{\\mu\\sigma} - \\partial_\\sigma g_{\\mu\\nu}',
+  '\\right)',
+  '',
   ...Array.from({ length: 80 }, (_, index) => `Scrollable line ${index + 1}: $x_${index + 1}^2$`),
 ].join('\n');
 
@@ -186,12 +197,39 @@ async function paneState(frame) {
     const editorStyle = getComputedStyle(editor);
     const previewStyle = getComputedStyle(preview);
 
+    function plainTextOutsideKatex(root) {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.textContent.trim()) {
+            return NodeFilter.FILTER_REJECT;
+          }
+
+          const parent = node.parentElement;
+          if (parent && parent.closest('.katex')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+
+          return NodeFilter.FILTER_ACCEPT;
+        },
+      });
+      const parts = [];
+      let node = walker.nextNode();
+
+      while (node) {
+        parts.push(node.textContent);
+        node = walker.nextNode();
+      }
+
+      return parts.join('\n');
+    }
+
     return {
       mode: document.getElementById('editor-container').className,
       editorValue: editor.value,
       katexCount: preview.querySelectorAll('.katex').length,
       previewText: preview.textContent,
       previewHtml: preview.innerHTML,
+      plainTextOutsideKatex: plainTextOutsideKatex(preview),
       editor: {
         width: editorRect.width,
         height: editorRect.height,
@@ -223,7 +261,13 @@ async function clickMode(frame, label) {
 }
 
 function assertPreviewHasMath(state, label) {
-  const expectedMathCount = 89;
+  const expectedMathCount = 90;
+  const rawMathNeedles = [
+    'G_{\\mu\\nu}',
+    '\\frac{8\\pi G}',
+    '\\Gamma^{\\lambda}_{\\mu\\nu}',
+    '\\partial_\\mu',
+  ];
 
   assert(state.katexCount >= expectedMathCount, `${label} should render every expected KaTeX node, got ${state.katexCount}`);
   assert(!state.previewText.includes('$E = mc^2$'), `${label} should not show raw inline dollar math`);
@@ -231,6 +275,11 @@ function assertPreviewHasMath(state, label) {
   assert(!state.previewText.includes('\\$G = H\\$'), `${label} should not show raw escaped inline dollar math`);
   assert(!state.previewHtml.includes('\\\\['), `${label} should not contain raw opening bracket display delimiter`);
   assert(!state.previewHtml.includes('\\\\]'), `${label} should not contain raw closing bracket display delimiter`);
+
+  for (const needle of rawMathNeedles) {
+    assert(!state.plainTextOutsideKatex.includes(needle), `${label} should not leave raw TeX outside KaTeX: ${needle}`);
+  }
+
   assert(state.preview.width > 100, `${label} preview should be visible`);
   assert(state.preview.height > 100, `${label} preview should have height`);
   assert(state.preview.scrollHeight > state.preview.clientHeight, `${label} preview should be scrollable`);

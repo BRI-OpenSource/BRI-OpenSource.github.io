@@ -75,12 +75,19 @@ function assertKatexRendering() {
     ['escaped display dollar math', '\\$\\$\na^2 + b^2 = c^2\n\\$\\$'],
     ['double escaped inline bracket math', '\\\\(E = mc^2\\\\)'],
     ['double escaped display bracket math', '\\\\[\na^2 + b^2 = c^2\n\\\\]'],
+    ['standalone Einstein tensor line', 'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
+    ['standalone Ricci tensor line', 'R_{\\mu\\nu} - \\tfrac{1}{2} R, g_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
+    ['standalone multiline Christoffel block', '\\Gamma^{\\lambda}_{\\mu\\nu} = \\tfrac{1}{2} g^{\\lambda\\sigma}\\left(\\partial_\\mu g_{\\nu\\sigma} +\n\\partial_\\nu g_{\\mu\\sigma} - \\partial_\\sigma g_{\\mu\\nu}\\right)'],
   ];
 
   for (const [label, input] of samples) {
     const html = markdown.render(normalizeMathDelimiters(input));
     expectIncludes(html, 'class="katex', label);
+    assert(!html.includes(`<p>${input}`), `${label} should not remain a raw Markdown paragraph`);
   }
+
+  const fencedHtml = markdown.render(normalizeMathDelimiters('```text\n\\frac{1}{2}\n```'));
+  assert(!fencedHtml.includes('class="katex'), 'fenced TeX should not be auto-rendered as math');
 }
 
 function assertCacheVersions() {

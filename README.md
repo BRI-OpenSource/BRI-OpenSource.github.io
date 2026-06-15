@@ -16,13 +16,13 @@ It is based on the Standard Notes community Basic Markdown editor and adds suppo
 Import this extension URL in Standard Notes:
 
 ```text
-https://bri-opensource.github.io/ext.json?v=1.7.16
+https://bri-opensource.github.io/ext.json?v=1.7.17
 ```
 
 The manifest points Standard Notes to the hosted plugin component:
 
 ```text
-https://bri-opensource.github.io/com.sncommunity.markdown-basic/dist/index.html?v=1.7.16
+https://bri-opensource.github.io/com.sncommunity.markdown-basic/dist/index.html?v=1.7.17
 ```
 
 ## Features
