@@ -237,6 +237,7 @@ async function paneState(frame) {
       editor: {
         width: editorRect.width,
         height: editorRect.height,
+        scrollTop: editor.scrollTop,
         scrollHeight: editor.scrollHeight,
         clientHeight: editor.clientHeight,
         overflowY: editorStyle.overflowY,
@@ -244,6 +245,7 @@ async function paneState(frame) {
       preview: {
         width: previewRect.width,
         height: previewRect.height,
+        scrollTop: preview.scrollTop,
         scrollHeight: preview.scrollHeight,
         clientHeight: preview.clientHeight,
         overflowY: previewStyle.overflowY,
@@ -277,6 +279,33 @@ async function appendEditorText(frame, text) {
     editor.dispatchEvent(new Event('input', { bubbles: true }));
   }, text);
   await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
+function paneScrollRatio(pane) {
+  const maxScrollTop = pane.scrollHeight - pane.clientHeight;
+  if (maxScrollTop <= 0) {
+    return 0;
+  }
+
+  return pane.scrollTop / maxScrollTop;
+}
+
+function assertScrollRatioClose(pane, expected, label, tolerance = 0.08) {
+  const actual = paneScrollRatio(pane);
+  assert(
+    Math.abs(actual - expected) <= tolerance,
+    `${label} should preserve scroll ratio near ${expected.toFixed(2)}, got ${actual.toFixed(2)}`
+  );
+}
+
+async function setPaneScroll(frame, paneId, ratio) {
+  await frame.evaluate(({ targetPaneId, targetRatio }) => {
+    const pane = document.getElementById(targetPaneId);
+    const maxScrollTop = pane.scrollHeight - pane.clientHeight;
+    pane.scrollTop = maxScrollTop > 0 ? maxScrollTop * targetRatio : 0;
+    pane.dispatchEvent(new Event('scroll', { bubbles: true }));
+  }, { targetPaneId: paneId, targetRatio: ratio });
+  await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 function assertPreviewHasMath(state, label) {
@@ -328,22 +357,37 @@ function assertPreviewHasMath(state, label) {
     await frame.waitForSelector('#preview .katex', { timeout: 10000 });
     const saveCountBeforeModeClicks = await saveItemMessageCount(page);
 
+    const editSourceRatio = 0.58;
+    await setPaneScroll(frame, 'editor', editSourceRatio);
+
+    await clickMode(frame, 'Preview');
+    const preview = await paneState(frame);
+    assertPreviewHasMath(preview, 'Preview mode');
+    assertScrollRatioClose(preview.preview, editSourceRatio, 'Edit to Preview');
+
+    const previewSourceRatio = 0.34;
+    await setPaneScroll(frame, 'preview', previewSourceRatio);
+
     await clickMode(frame, 'Split');
     const split = await paneState(frame);
     assertPreviewHasMath(split, 'Split mode');
     assert(split.editor.width > 100, 'Split mode editor should be visible');
     assert(split.editor.scrollHeight > split.editor.clientHeight, 'Split mode editor should be scrollable');
     assert(split.editor.overflowY === 'auto' || split.editor.overflowY === 'scroll', 'Split mode editor overflow should allow scrolling');
+    assertScrollRatioClose(split.editor, previewSourceRatio, 'Preview to Split editor');
+    assertScrollRatioClose(split.preview, previewSourceRatio, 'Preview to Split preview');
 
-    await clickMode(frame, 'Preview');
-    const preview = await paneState(frame);
-    assertPreviewHasMath(preview, 'Preview mode');
+    await setPaneScroll(frame, 'editor', 0.82);
+    const independentSplit = await paneState(frame);
+    assertScrollRatioClose(independentSplit.editor, 0.82, 'Split editor manual scroll');
+    assertScrollRatioClose(independentSplit.preview, previewSourceRatio, 'Split preview independent scroll');
 
     await clickMode(frame, 'Edit');
     const edit = await paneState(frame);
     assert(edit.editor.width > 100, 'Edit mode editor should be visible');
     assert(edit.editor.scrollHeight > edit.editor.clientHeight, 'Edit mode editor should be scrollable');
     assert(edit.editor.overflowY === 'auto' || edit.editor.overflowY === 'scroll', 'Edit mode editor overflow should allow scrolling');
+    assertScrollRatioClose(edit.editor, 0.82, 'Split to Edit');
 
     const saveCountAfterModeClicks = await saveItemMessageCount(page);
     assert.strictEqual(saveCountAfterModeClicks, saveCountBeforeModeClicks, 'Mode switches should not send save-items messages');

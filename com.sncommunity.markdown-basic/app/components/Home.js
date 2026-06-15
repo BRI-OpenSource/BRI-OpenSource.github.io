@@ -92,9 +92,77 @@ export default class Home extends React.Component {
     }
   }
 
+  scrollRatioForElement(element) {
+    if (!element) {
+      return 0;
+    }
+
+    const maxScrollTop = element.scrollHeight - element.clientHeight;
+    if (maxScrollTop <= 0) {
+      return 0;
+    }
+
+    const ratio = element.scrollTop / maxScrollTop;
+    if (!Number.isFinite(ratio)) {
+      return 0;
+    }
+
+    return Math.min(1, Math.max(0, ratio));
+  }
+
+  scrollSourceForModeChange(nextMode) {
+    if (this.state.mode && this.state.mode.mode === SplitMode) {
+      return nextMode.mode === PreviewMode ? this.preview : this.editor;
+    }
+
+    if (this.state.mode && this.state.mode.mode === PreviewMode) {
+      return this.preview;
+    }
+
+    return this.editor;
+  }
+
+  scrollTargetsForMode(mode) {
+    if (mode.mode === SplitMode) {
+      return [this.editor, this.preview];
+    }
+
+    if (mode.mode === PreviewMode) {
+      return [this.preview];
+    }
+
+    return [this.editor];
+  }
+
+  applyScrollRatioToMode(mode, ratio) {
+    const safeRatio = Number.isFinite(ratio) ? Math.min(1, Math.max(0, ratio)) : 0;
+
+    for (const target of this.scrollTargetsForMode(mode)) {
+      if (!target) {
+        continue;
+      }
+
+      const maxScrollTop = target.scrollHeight - target.clientHeight;
+      target.scrollTop = maxScrollTop > 0 ? maxScrollTop * safeRatio : 0;
+    }
+  }
+
+  applyScrollRatioAfterLayout(mode, ratio) {
+    const apply = () => this.applyScrollRatioToMode(mode, ratio);
+
+    if (window.requestAnimationFrame) {
+      window.requestAnimationFrame(apply);
+    } else {
+      window.setTimeout(apply, 0);
+    }
+  }
+
   changeMode(mode) {
+    const scrollRatio = this.scrollRatioForElement(this.scrollSourceForModeChange(mode));
+
     this.setState({ mode }, () => {
       this.updatePreviewText();
+      this.applyScrollRatioAfterLayout(mode, scrollRatio);
     });
     this.storeMode(mode);
   }
