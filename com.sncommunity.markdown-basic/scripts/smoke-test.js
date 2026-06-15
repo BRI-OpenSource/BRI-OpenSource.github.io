@@ -24,6 +24,11 @@ function expectIncludes(text, needle, label) {
   );
 }
 
+function assertRenderedKatex(html, label) {
+  expectIncludes(html, 'class="katex"', label);
+  assert(!html.includes('katex-error'), `${label} should not render a KaTeX error`);
+}
+
 function blockFor(source, selector, fromIndex = 0) {
   const selectorIndex = source.indexOf(selector, fromIndex);
   assert(selectorIndex !== -1, `Missing CSS selector ${selector}`);
@@ -68,6 +73,10 @@ function assertKatexRendering() {
     ['inline dollar math', 'Inline $E = mc^2$ done'],
     ['display dollar math', '$$\na^2 + b^2 = c^2\n$$'],
     ['inline bracket math', '\\(E = mc^2\\)'],
+    ['inline bracket greek command in sentence', 'The cross-coupling term \\(\\gamma\\) exists because...'],
+    ['inline bracket Delta command in sentence', 'A central mass sources these fields through its geometric slip \\(\\Delta = 34.25\\).'],
+    ['inline bracket proportional command in sentence', 'Since \\(L_0(r) \\propto -K/r\\), we...'],
+    ['inline bracket partial command in sentence', 'We consider static solutions \\(\\partial_t = 0\\).'],
     ['single-line display bracket math', '\\[a^2 + b^2 = c^2\\]'],
     ['multiline display bracket math', '\\[\na^2 + b^2 = c^2\n\\]'],
     ['spaced inline dollar math', 'Inline $ E = mc^2 $ done'],
@@ -82,7 +91,7 @@ function assertKatexRendering() {
 
   for (const [label, input] of samples) {
     const html = markdown.render(normalizeMathDelimiters(input));
-    expectIncludes(html, 'class="katex', label);
+    assertRenderedKatex(html, label);
     assert(!html.includes(`<p>${input}`), `${label} should not remain a raw Markdown paragraph`);
   }
 

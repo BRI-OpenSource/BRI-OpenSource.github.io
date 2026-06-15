@@ -3,7 +3,8 @@ const MATH_BLOCK_DELIMITER_PATTERN = /^\s*\$\$\s*$/;
 const MARKDOWN_BLOCK_PATTERN = /^\s{0,3}(?:#{1,6}\s|[-+*]\s|\d+\.\s|>\s|\|)/;
 const LATEX_COMMAND_PATTERN = /\\(?:frac|tfrac|dfrac|sqrt|sum|prod|int|oint|lim|partial|nabla|Gamma|Delta|Lambda|Omega|Sigma|alpha|beta|gamma|delta|epsilon|varepsilon|theta|lambda|mu|nu|rho|sigma|tau|phi|varphi|pi|psi|chi|eta|kappa|xi|zeta|left|right|cdot|times|qquad|quad|equiv|approx|leq|geq|neq|to|mapsto|infty|mathrm|mathbf|mathbb|mathcal|text|begin|end)\b/;
 const SCRIPT_PATTERN = /[A-Za-z0-9)}](?:[_^](?:\{[^}\n]+\}|\\?[A-Za-z]+|[0-9]))/;
-const OPERATOR_PATTERN = /(?:=|\\equiv|\\approx|\\leq|\\geq|\\neq|\\to|\\mapsto|[+\-*/])/;
+const OPERATOR_PATTERN = /(?:=|\\equiv|\\approx|\\leq|\\geq|\\neq|\\to|\\mapsto|\\propto|[+\-*/])/;
+const EXPLICIT_MATH_DELIMITER_PATTERN = /(?:\\\(|\\\)|\\\[|\\\]|\$[^$\n]+\$)/;
 
 function normalizeExplicitMathDelimiters(text) {
   return text
@@ -25,6 +26,10 @@ function normalizeExplicitMathDelimiters(text) {
     .replace(/(^|[\s([{])\\\\\(([^\n]+?)\\\\\)(?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
       return `${prefix}\\(${body}\\)`;
     });
+}
+
+function hasExplicitMathDelimiter(line) {
+  return EXPLICIT_MATH_DELIMITER_PATTERN.test(line);
 }
 
 function isProbableStandaloneTexLine(line, continuingBlock) {
@@ -86,6 +91,12 @@ function wrapStandaloneTexBlocks(text) {
     }
 
     if (inMathBlock) {
+      normalized.push(line);
+      continue;
+    }
+
+    if (hasExplicitMathDelimiter(line)) {
+      flushPendingTexBlock();
       normalized.push(line);
       continue;
     }

@@ -25,6 +25,10 @@ const noteText = [
   '',
   'Inline bracket: \\(\\alpha + \\beta\\)',
   'Double escaped inline bracket: \\\\(\\gamma + \\delta\\\\)',
+  'The cross-coupling term \\(\\gamma\\) exists because the jitterbug transformation locks rotation and contraction together.',
+  'A central mass sources these fields through its geometric slip \\(\\Delta = 34.25\\).',
+  'Since \\(L_0(r) \\propto -K/r\\), we can read the radial behavior.',
+  'We look for static, spherically symmetric background solutions \\(\\partial_t = 0\\).',
   '',
   'Display bracket:',
   '\\[',
@@ -257,19 +261,39 @@ async function clickMode(frame, label) {
     }
     button.click();
   }, label);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
+async function saveItemMessageCount(page) {
+  return page.evaluate(() => {
+    return window.pluginMessages.filter((message) => message && message.action === 'save-items').length;
+  });
+}
+
+async function appendEditorText(frame, text) {
+  await frame.evaluate((textToAppend) => {
+    const editor = document.getElementById('editor');
+    editor.value += textToAppend;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }, text);
+  await new Promise((resolve) => setTimeout(resolve, 350));
 }
 
 function assertPreviewHasMath(state, label) {
   const expectedMathCount = 90;
   const rawMathNeedles = [
-    'G_{\\mu\\nu}',
-    '\\frac{8\\pi G}',
-    '\\Gamma^{\\lambda}_{\\mu\\nu}',
-    '\\partial_\\mu',
+    'G_{\\\\mu\\\\nu}',
+    '\\\\frac{8\\\\pi G}',
+    '\\\\Gamma^{\\\\lambda}_{\\\\mu\\\\nu}',
+    '\\\\partial_\\\\mu',
+    '\\\\gamma',
+    '\\\\Delta = 34.25',
+    '\\\\propto',
+    '\\\\partial_t',
   ];
 
   assert(state.katexCount >= expectedMathCount, `${label} should render every expected KaTeX node, got ${state.katexCount}`);
+  assert(!state.previewHtml.includes('katex-error'), `${label} should not render KaTeX errors`);
   assert(!state.previewText.includes('$E = mc^2$'), `${label} should not show raw inline dollar math`);
   assert(!state.previewText.includes('$ F = ma $'), `${label} should not show raw spaced inline dollar math`);
   assert(!state.previewText.includes('\\$G = H\\$'), `${label} should not show raw escaped inline dollar math`);
@@ -302,6 +326,7 @@ function assertPreviewHasMath(state, label) {
 
     const frame = await page.waitForFrame((candidate) => candidate.url().includes('/dist/index.html'));
     await frame.waitForSelector('#preview .katex', { timeout: 10000 });
+    const saveCountBeforeModeClicks = await saveItemMessageCount(page);
 
     await clickMode(frame, 'Split');
     const split = await paneState(frame);
@@ -320,7 +345,14 @@ function assertPreviewHasMath(state, label) {
     assert(edit.editor.scrollHeight > edit.editor.clientHeight, 'Edit mode editor should be scrollable');
     assert(edit.editor.overflowY === 'auto' || edit.editor.overflowY === 'scroll', 'Edit mode editor overflow should allow scrolling');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX through the relay path and panes are scrollable.');
+    const saveCountAfterModeClicks = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterModeClicks, saveCountBeforeModeClicks, 'Mode switches should not send save-items messages');
+
+    await appendEditorText(frame, '\nActual text edit: $y^2$');
+    const saveCountAfterTextEdit = await saveItemMessageCount(page);
+    assert(saveCountAfterTextEdit > saveCountAfterModeClicks, 'Text input should still send save-items messages');
+
+    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, and panes are scrollable.');
   } finally {
     await browser.close();
     server.close();

@@ -46,13 +46,57 @@ export default class Home extends React.Component {
     }
   }
 
-  changeMode(mode) {
-    this.setState({ mode });
-    if (!this.note) {
+  modeStorageKey(note) {
+    if (!note || !note.uuid) {
+      return null;
+    }
+
+    return `snlatex.mode.${note.uuid}`;
+  }
+
+  modeStorage() {
+    try {
+      return window.localStorage;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  loadStoredMode(note) {
+    const key = this.modeStorageKey(note);
+    const storage = this.modeStorage();
+    if (!key || !storage) {
+      return EditMode;
+    }
+
+    try {
+      const value = storage.getItem(key);
+      const modeValue = value === null ? EditMode : Number(value);
+      return this.modes.some((mode) => mode.mode === modeValue) ? modeValue : EditMode;
+    } catch (_error) {
+      return EditMode;
+    }
+  }
+
+  storeMode(mode) {
+    const key = this.modeStorageKey(this.note);
+    const storage = this.modeStorage();
+    if (!key || !storage) {
       return;
     }
-    this.note.clientData = { mode: mode.mode };
-    this.componentRelay.saveItem(this.note);
+
+    try {
+      storage.setItem(key, String(mode.mode));
+    } catch (_error) {
+      // Local mode persistence is best-effort; note content must never depend on it.
+    }
+  }
+
+  changeMode(mode) {
+    this.setState({ mode }, () => {
+      this.updatePreviewText();
+    });
+    this.storeMode(mode);
   }
 
   configureMarkdown() {
@@ -112,10 +156,7 @@ export default class Home extends React.Component {
     this.componentRelay.streamContextItem((note) => {
       this.note = note;
 
-      if (note.clientData) {
-        const mode = note.clientData.mode ?? EditMode;
-        this.setModeFromModeValue(mode);
-      }
+      this.setModeFromModeValue(this.loadStoredMode(note));
 
       // Only update UI on non-metadata updates.
       if (note.isMetadataUpdate) {
