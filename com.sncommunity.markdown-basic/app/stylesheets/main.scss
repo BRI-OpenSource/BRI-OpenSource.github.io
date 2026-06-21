@@ -459,11 +459,44 @@ body > div > div {
     min-width: 96px;
   }
 
+  .search-field {
+    position: relative;
+    width: min(220px, 100%);
+    flex: 0 1 220px;
+    min-width: 0;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    display: flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    color: var(--sn-stylekit-neutral-color);
+    opacity: 0.72;
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+
+  .search-icon svg {
+    display: block;
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
   .search-input {
     box-sizing: border-box;
-    width: min(220px, 100%);
+    width: 100%;
     height: 30px;
-    padding: 4px 12px;
+    padding: 4px 12px 4px 34px;
     border: 1px solid var(--sn-component-inner-border-color);
     border-radius: 999px;
     outline: 0;
@@ -496,9 +529,15 @@ body > div > div {
     .search-input {
       width: 100%;
       height: 28px;
-      padding-left: 10px;
+      padding-left: 30px;
       padding-right: 10px;
       font-size: 0.85em;
+    }
+
+    .search-icon {
+      left: 10px;
+      width: 14px;
+      height: 14px;
     }
 
     .buttons .button {

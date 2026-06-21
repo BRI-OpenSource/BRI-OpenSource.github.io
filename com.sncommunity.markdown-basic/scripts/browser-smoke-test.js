@@ -252,6 +252,7 @@ async function paneState(frame) {
     const editorHighlights = document.getElementById('editor-highlights');
     const preview = document.getElementById('preview');
     const search = document.getElementById('note-search');
+    const searchIcon = document.querySelector('.search-icon');
     const modeButtons = document.querySelector('.segmented-buttons-container');
     const header = document.getElementById('header');
     const editorPaneRect = editorPane.getBoundingClientRect();
@@ -259,6 +260,7 @@ async function paneState(frame) {
     const editorHighlightsRect = editorHighlights.getBoundingClientRect();
     const previewRect = preview.getBoundingClientRect();
     const searchRect = search.getBoundingClientRect();
+    const searchIconRect = searchIcon.getBoundingClientRect();
     const modeButtonsRect = modeButtons.getBoundingClientRect();
     const headerRect = header.getBoundingClientRect();
     const editorPaneStyle = getComputedStyle(editorPane);
@@ -346,6 +348,14 @@ async function paneState(frame) {
         width: searchRect.width,
         top: searchRect.top,
         bottom: searchRect.bottom,
+        placeholder: search.getAttribute('placeholder') || '',
+      },
+      searchIcon: {
+        left: searchIconRect.left,
+        right: searchIconRect.right,
+        width: searchIconRect.width,
+        top: searchIconRect.top,
+        bottom: searchIconRect.bottom,
       },
       editorPane: {
         width: editorPaneRect.width,
@@ -646,10 +656,15 @@ function assertMathOverflowBehavior(state, label) {
 function assertToolbarSearchLayout(state, label) {
   assert(state.modeButtons.width > 100, `${label} should show the mode controls`);
   assert(state.search.width > 70, `${label} should show the search input`);
+  assert.strictEqual(state.search.placeholder, '', `${label} search input should use the icon instead of visible placeholder text`);
+  assert(state.searchIcon.width > 8, `${label} should show the search icon`);
   assert(state.modeButtons.left < state.search.left, `${label} should place mode controls left of search`);
   assert(Math.abs(state.modeButtons.top - state.search.top) <= 4, `${label} search should stay on the mode-control row`);
   assert(state.search.right <= state.header.right + 1, `${label} search input should stay inside the header`);
   assert(state.search.bottom <= state.header.bottom + 1, `${label} search input should stay inside the header vertically`);
+  assert(state.searchIcon.left >= state.search.left + 6, `${label} search icon should sit inside the input`);
+  assert(state.searchIcon.right < state.search.right - 20, `${label} search icon should leave room for query text`);
+  assert(Math.abs(((state.searchIcon.top + state.searchIcon.bottom) / 2) - ((state.search.top + state.search.bottom) / 2)) <= 2, `${label} search icon should be vertically centered`);
 }
 
 function assertPreviewEditorHidden(state, label) {

@@ -264,9 +264,19 @@ function assertScrollbarCss() {
   expectIncludes(searchContainer, 'justify-content: flex-end;', 'search container CSS');
   expectIncludes(searchContainer, 'flex: 1 1 140px;', 'search container CSS');
 
+  const searchField = blockFor(scss, '.search-field {');
+  expectIncludes(searchField, 'position: relative;', 'search field CSS');
+  expectIncludes(searchField, 'width: min(220px, 100%);', 'search field CSS');
+
+  const searchIcon = blockFor(scss, '.search-icon {');
+  expectIncludes(searchIcon, 'position: absolute;', 'search icon CSS');
+  expectIncludes(searchIcon, 'pointer-events: none;', 'search icon CSS');
+  expectIncludes(searchIcon, 'transform: translateY(-50%);', 'search icon CSS');
+
   const searchInput = blockFor(scss, '.search-input {');
   expectIncludes(searchInput, 'border-radius: 999px;', 'search input CSS');
-  expectIncludes(searchInput, 'width: min(220px, 100%);', 'search input CSS');
+  expectIncludes(searchInput, 'width: 100%;', 'search input CSS');
+  expectIncludes(searchInput, 'padding: 4px 12px 4px 34px;', 'search input CSS');
   expectIncludes(searchInput, 'border: 1px solid var(--sn-component-inner-border-color);', 'search input CSS');
   expectIncludes(searchInput, 'box-shadow: inset 0 0 0 1px rgba(112, 88, 255, 0.08);', 'search input CSS');
 

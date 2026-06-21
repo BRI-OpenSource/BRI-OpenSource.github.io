@@ -1037,16 +1037,23 @@ export default class Home extends React.Component {
             </div>
 
             <div className="search-container">
-              <input
-                id="note-search"
-                className="search-input"
-                type="search"
-                aria-label="Search note text"
-                placeholder="Search"
-                autoComplete="off"
-                value={this.state.searchQuery}
-                onChange={(event) => this.handleSearchChange(event)}
-              />
+              <div className="search-field">
+                <span className="search-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" focusable="false">
+                    <circle cx="11" cy="11" r="6"></circle>
+                    <path d="M15.5 15.5L20 20"></path>
+                  </svg>
+                </span>
+                <input
+                  id="note-search"
+                  className="search-input"
+                  type="search"
+                  aria-label="Search note text"
+                  autoComplete="off"
+                  value={this.state.searchQuery}
+                  onChange={(event) => this.handleSearchChange(event)}
+                />
+              </div>
             </div>
           </div>
         </div>
