@@ -217,6 +217,7 @@ function assertScrollbarCss() {
   expectIncludes(editorHighlights, 'pointer-events: none;', 'editor highlight CSS');
   expectIncludes(editorHighlights, 'visibility: hidden;', 'editor highlight CSS');
   expectIncludes(editorHighlights, '&.active', 'editor highlight CSS');
+  expectIncludes(editorHighlights, '&.selection-only', 'editor selection highlight CSS');
 
   const preview = blockFor(scss, '#preview {', sharedIndex + scrollPaneSelector.length);
   expectIncludes(preview, '&.split', 'preview CSS');
@@ -234,6 +235,10 @@ function assertScrollbarCss() {
   const highlightMark = blockFor(highlightCss, '.search-highlight {');
   expectIncludes(highlightMark, 'background-color: rgba(255, 221, 87, 0.48);', 'search highlight CSS');
   expectIncludes(highlightMark, 'color: inherit;', 'search highlight CSS');
+  const selectionMark = blockFor(highlightCss, '.selection-highlight {');
+  expectIncludes(selectionMark, 'background-color: rgba(112, 88, 255, 0.34);', 'selection highlight CSS');
+  expectIncludes(selectionMark, 'color: inherit;', 'selection highlight CSS');
+  expectIncludes(highlightCss, '.search-highlight.selection-highlight', 'overlapping search/selection highlight CSS');
 
   const toolbar = blockFor(scss, '.toolbar {');
   expectIncludes(toolbar, 'justify-content: space-between;', 'toolbar CSS');
@@ -262,8 +267,8 @@ function assertScrollbarCss() {
   const searchInput = blockFor(scss, '.search-input {');
   expectIncludes(searchInput, 'border-radius: 999px;', 'search input CSS');
   expectIncludes(searchInput, 'width: min(220px, 100%);', 'search input CSS');
-  expectIncludes(searchInput, 'border: 1px solid var(--sn-stylekit-info-color);', 'search input CSS');
-  expectIncludes(searchInput, 'box-shadow: inset 0 0 0 1px rgba(112, 88, 255, 0.22);', 'search input CSS');
+  expectIncludes(searchInput, 'border: 1px solid var(--sn-component-inner-border-color);', 'search input CSS');
+  expectIncludes(searchInput, 'box-shadow: inset 0 0 0 1px rgba(112, 88, 255, 0.08);', 'search input CSS');
 
   const mobileHeader = blockFor(scss, '@media (max-width: 520px)');
   const mobileToolbar = blockFor(mobileHeader, '.toolbar {');

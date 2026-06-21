@@ -9,6 +9,7 @@ const EditMode = 0;
 const SplitMode = 1;
 const PreviewMode = 2;
 const SearchHighlightClass = 'search-highlight';
+const SelectionHighlightClass = 'selection-highlight';
 
 export default class Home extends React.Component {
 
@@ -26,6 +27,10 @@ export default class Home extends React.Component {
       searchQuery: '',
     };
     this.modeInitializedForNoteUuid = null;
+    this.selectionRange = null;
+    this.previewTextNodeMap = new WeakMap();
+    this.updatingSelectionHighlights = false;
+    this.handleDocumentSelectionChange = this.handleDocumentSelectionChange.bind(this);
   }
 
   componentDidMount() {
@@ -40,6 +45,7 @@ export default class Home extends React.Component {
     this.updatePreviewText();
     this.addChangeListener();
     this.addEditorScrollListener();
+    this.addSelectionListeners();
 
     this.configureResizer();
     this.addTabHandler();
@@ -127,12 +133,18 @@ export default class Home extends React.Component {
   }
 
   changeMode(mode) {
+    this.captureCurrentSelection();
     const scrollRatio = this.scrollRatioForElement(this.scrollSourceForModeChange(mode));
 
     this.setState({ mode }, () => {
       this.updatePreviewText();
       this.applyScrollRatioAfterLayout(mode, scrollRatio);
     });
+  }
+
+  handleModeMouseDown(event) {
+    event.preventDefault();
+    this.captureCurrentSelection();
   }
 
   handleModeKeyDown(event, mode) {
@@ -256,20 +268,111 @@ export default class Home extends React.Component {
     return this.searchQuery().length > 0;
   }
 
-  highlightPlainText(text, query) {
+  clampSourceRange(start, end, text = this.editor ? this.editor.value || '' : '') {
+    const length = text.length;
+    const safeStart = Number.isFinite(start) ? Math.max(0, Math.min(length, start)) : 0;
+    const safeEnd = Number.isFinite(end) ? Math.max(0, Math.min(length, end)) : 0;
+
+    if (safeStart === safeEnd) {
+      return null;
+    }
+
+    return {
+      start: Math.min(safeStart, safeEnd),
+      end: Math.max(safeStart, safeEnd),
+    };
+  }
+
+  activeSelectionRange(text) {
+    if (!this.selectionRange) {
+      return null;
+    }
+
+    return this.clampSourceRange(this.selectionRange.start, this.selectionRange.end, text);
+  }
+
+  searchRanges(text, query) {
     const pattern = new RegExp(this.escapeRegExp(query), 'gi');
-    let result = '';
-    let lastIndex = 0;
+    const ranges = [];
     let match = pattern.exec(text);
 
     while (match) {
-      result += this.escapeHtml(text.slice(lastIndex, match.index));
-      result += `<mark class="${SearchHighlightClass}">${this.escapeHtml(match[0])}</mark>`;
-      lastIndex = pattern.lastIndex;
+      ranges.push({
+        start: match.index,
+        end: pattern.lastIndex,
+        className: SearchHighlightClass,
+      });
       match = pattern.exec(text);
     }
 
-    result += this.escapeHtml(text.slice(lastIndex));
+    return ranges;
+  }
+
+  editorSelectionHighlightRange(text) {
+    const range = this.activeSelectionRange(text);
+    if (!range) {
+      return null;
+    }
+
+    if (this.selectionRange.origin === 'editor' && document.activeElement === this.editor) {
+      return null;
+    }
+
+    return {
+      ...range,
+      className: SelectionHighlightClass,
+    };
+  }
+
+  classNamesForIndex(index, ranges) {
+    const classNames = [];
+
+    for (const range of ranges) {
+      if (index >= range.start && index < range.end && !classNames.includes(range.className)) {
+        classNames.push(range.className);
+      }
+    }
+
+    return classNames.join(' ');
+  }
+
+  highlightPlainTextRanges(text, ranges) {
+    const normalizedRanges = ranges
+      .map((range) => ({
+        start: Math.max(0, Math.min(text.length, range.start)),
+        end: Math.max(0, Math.min(text.length, range.end)),
+        className: range.className,
+      }))
+      .filter((range) => range.end > range.start);
+
+    let result = '';
+    let activeClassNames = null;
+    let segment = '';
+
+    const flushSegment = () => {
+      if (!segment) {
+        return;
+      }
+
+      const escapedSegment = this.escapeHtml(segment);
+      result += activeClassNames
+        ? `<mark class="${activeClassNames}">${escapedSegment}</mark>`
+        : escapedSegment;
+      segment = '';
+    };
+
+    for (let index = 0; index < text.length; index++) {
+      const classNames = this.classNamesForIndex(index, normalizedRanges);
+
+      if (classNames !== activeClassNames) {
+        flushSegment();
+        activeClassNames = classNames;
+      }
+
+      segment += text[index];
+    }
+
+    flushSegment();
     return result;
   }
 
@@ -280,16 +383,24 @@ export default class Home extends React.Component {
 
     const query = this.searchQuery();
     const hasQuery = query.length > 0;
+    const searchRanges = hasQuery ? this.searchRanges(text, query) : [];
+    const selectionRange = this.editorSelectionHighlightRange(text);
+    const selectionRanges = selectionRange ? [selectionRange] : [];
+    const hasSelection = selectionRanges.length > 0;
     this.editor.classList.toggle('has-search-query', hasQuery);
-    this.editorHighlights.classList.toggle('active', hasQuery);
+    this.editorHighlights.classList.toggle('active', hasQuery || hasSelection);
+    this.editorHighlights.classList.toggle('selection-only', hasSelection && !hasQuery);
 
-    if (!hasQuery) {
+    if (!hasQuery && !hasSelection) {
       this.editorHighlights.innerHTML = '';
       return;
     }
 
     const displayText = text.endsWith('\n') ? `${text} ` : text;
-    this.editorHighlights.innerHTML = this.highlightPlainText(displayText, query);
+    this.editorHighlights.innerHTML = this.highlightPlainTextRanges(displayText, [
+      ...searchRanges,
+      ...selectionRanges,
+    ]);
     this.syncEditorHighlightsScroll();
   }
 
@@ -306,6 +417,415 @@ export default class Home extends React.Component {
     this.editor.addEventListener('scroll', () => {
       this.syncEditorHighlightsScroll();
     });
+  }
+
+  addSelectionListeners() {
+    document.addEventListener('selectionchange', this.handleDocumentSelectionChange);
+
+    this.editor.addEventListener('select', () => this.storeEditorSelection());
+    this.editor.addEventListener('keyup', () => this.storeEditorSelection());
+    this.editor.addEventListener('mouseup', () => this.storeEditorSelection());
+    this.editor.addEventListener('touchend', () => {
+      window.setTimeout(() => this.storeEditorSelection(), 0);
+    });
+
+    this.preview.addEventListener('mousedown', () => {
+      if (this.selectionRange && this.selectionRange.origin !== 'preview') {
+        this.clearPreviewSelectionHighlights();
+      }
+    });
+  }
+
+  captureCurrentSelection() {
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (this.previewContainsSelection(selection) && !selection.isCollapsed) {
+      return this.storePreviewSelection(selection);
+    }
+
+    if (this.storeEditorSelection()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  handleDocumentSelectionChange() {
+    if (this.updatingSelectionHighlights) {
+      return;
+    }
+
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (this.previewContainsSelection(selection)) {
+      if (selection.isCollapsed) {
+        this.clearSelectionRange();
+        return;
+      }
+
+      this.storePreviewSelection(selection);
+      return;
+    }
+
+    this.storeEditorSelection();
+  }
+
+  storeEditorSelection() {
+    if (!this.editor || document.activeElement !== this.editor) {
+      return false;
+    }
+
+    const range = this.clampSourceRange(this.editor.selectionStart, this.editor.selectionEnd);
+    if (!range) {
+      this.clearSelectionRange();
+      return false;
+    }
+
+    return this.setSelectionRange({
+      ...range,
+      origin: 'editor',
+    });
+  }
+
+  previewContainsSelection(selection) {
+    if (!selection || !selection.rangeCount || !this.preview) {
+      return false;
+    }
+
+    const range = selection.getRangeAt(0);
+    return this.preview.contains(selection.anchorNode)
+      || this.preview.contains(selection.focusNode)
+      || this.preview.contains(range.commonAncestorContainer);
+  }
+
+  previewOwnsNativeSelection() {
+    const selection = window.getSelection ? window.getSelection() : null;
+    return this.previewContainsSelection(selection) && !selection.isCollapsed;
+  }
+
+  storePreviewSelection(selection) {
+    const text = this.editor.value || '';
+    this.rebuildPreviewSourceMap(text);
+    const range = this.sourceRangeForPreviewSelection(selection, text);
+
+    if (!range) {
+      return false;
+    }
+
+    return this.setSelectionRange({
+      ...range,
+      origin: 'preview',
+    });
+  }
+
+  setSelectionRange(range) {
+    const text = this.editor.value || '';
+    const normalizedRange = this.clampSourceRange(range.start, range.end, text);
+
+    if (!normalizedRange) {
+      return false;
+    }
+
+    this.selectionRange = {
+      ...normalizedRange,
+      origin: range.origin,
+    };
+    this.updateSelectionHighlights(text);
+    return true;
+  }
+
+  clearSelectionRange() {
+    if (!this.selectionRange) {
+      return;
+    }
+
+    this.selectionRange = null;
+    this.updateSelectionHighlights(this.editor.value || '');
+  }
+
+  shouldMapPreviewTextNode(node) {
+    const parent = node.parentElement;
+    if (!parent || !node.nodeValue) {
+      return false;
+    }
+
+    return !parent.closest('script, style, textarea, .katex');
+  }
+
+  sourceOffsetsForRenderedText(sourceText, renderedText, cursor) {
+    const offsets = new Array(renderedText.length).fill(null);
+    if (!renderedText) {
+      return { offsets, nextCursor: cursor };
+    }
+
+    const sourceIndex = sourceText.indexOf(renderedText, cursor);
+    if (sourceIndex < 0) {
+      return { offsets, nextCursor: cursor };
+    }
+
+    for (let index = 0; index < renderedText.length; index++) {
+      offsets[index] = sourceIndex + index;
+    }
+
+    return {
+      offsets,
+      nextCursor: sourceIndex + renderedText.length,
+    };
+  }
+
+  rebuildPreviewSourceMap(sourceText) {
+    this.previewTextNodeMap = new WeakMap();
+    if (!this.preview) {
+      return;
+    }
+
+    const walker = document.createTreeWalker(this.preview, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        return this.shouldMapPreviewTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const nodes = [];
+    let node = walker.nextNode();
+
+    while (node) {
+      nodes.push(node);
+      node = walker.nextNode();
+    }
+
+    let cursor = 0;
+    for (const textNode of nodes) {
+      const mapping = this.sourceOffsetsForRenderedText(sourceText, textNode.nodeValue, cursor);
+      this.previewTextNodeMap.set(textNode, mapping.offsets);
+      cursor = mapping.nextCursor;
+    }
+  }
+
+  sourceRangeForPreviewSelection(selection, sourceText) {
+    const range = selection.getRangeAt(0);
+    const walker = document.createTreeWalker(this.preview, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        return this.shouldMapPreviewTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const sourceOffsets = [];
+    let node = walker.nextNode();
+
+    while (node) {
+      if (range.intersectsNode(node)) {
+        const nodeOffsets = this.previewTextNodeMap.get(node);
+        let startOffset = 0;
+        let endOffset = node.nodeValue.length;
+
+        if (node === range.startContainer) {
+          startOffset = range.startOffset;
+        }
+        if (node === range.endContainer) {
+          endOffset = range.endOffset;
+        }
+
+        for (let index = startOffset; index < endOffset; index++) {
+          const sourceOffset = nodeOffsets ? nodeOffsets[index] : null;
+          if (sourceOffset !== null && sourceOffset !== undefined) {
+            sourceOffsets.push(sourceOffset);
+          }
+        }
+      }
+
+      node = walker.nextNode();
+    }
+
+    if (!sourceOffsets.length) {
+      return null;
+    }
+
+    const start = Math.min(...sourceOffsets);
+    const end = Math.max(...sourceOffsets) + 1;
+    return this.expandSourceSelectionForRenderedRange(sourceText, start, end);
+  }
+
+  expandSourceSelectionForRenderedRange(sourceText, start, end) {
+    let range = this.clampSourceRange(start, end, sourceText);
+    if (!range) {
+      return null;
+    }
+
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+
+      if (sourceText.slice(range.start - 2, range.start) === '**' && sourceText.slice(range.end, range.end + 2) === '**') {
+        range = { start: range.start - 2, end: range.end + 2 };
+        expanded = true;
+        continue;
+      }
+
+      if (sourceText.slice(range.start - 2, range.start) === '__' && sourceText.slice(range.end, range.end + 2) === '__') {
+        range = { start: range.start - 2, end: range.end + 2 };
+        expanded = true;
+        continue;
+      }
+
+      if (sourceText[range.start - 1] === '`' && sourceText[range.end] === '`') {
+        range = { start: range.start - 1, end: range.end + 1 };
+        expanded = true;
+        continue;
+      }
+
+      if (sourceText[range.start - 1] === '*' && sourceText[range.end] === '*') {
+        range = { start: range.start - 1, end: range.end + 1 };
+        expanded = true;
+        continue;
+      }
+
+      if (sourceText[range.start - 1] === '_' && sourceText[range.end] === '_') {
+        range = { start: range.start - 1, end: range.end + 1 };
+        expanded = true;
+        continue;
+      }
+
+      if (sourceText[range.start - 1] === '[' && sourceText.slice(range.end, range.end + 2) === '](') {
+        const linkEnd = sourceText.indexOf(')', range.end + 2);
+        if (linkEnd >= 0) {
+          range = { start: range.start - 1, end: linkEnd + 1 };
+          expanded = true;
+        }
+      }
+    }
+
+    return this.clampSourceRange(range.start, range.end, sourceText);
+  }
+
+  clearPreviewSelectionHighlights() {
+    if (!this.preview) {
+      return;
+    }
+
+    const marks = Array.from(this.preview.querySelectorAll(`mark.${SelectionHighlightClass}`));
+    for (const mark of marks) {
+      const parent = mark.parentNode;
+      if (!parent) {
+        continue;
+      }
+
+      while (mark.firstChild) {
+        parent.insertBefore(mark.firstChild, mark);
+      }
+      parent.removeChild(mark);
+      parent.normalize();
+    }
+  }
+
+  sourceSegmentsForTextNode(node, sourceRange) {
+    const offsets = this.previewTextNodeMap.get(node);
+    if (!offsets) {
+      return [];
+    }
+
+    const segments = [];
+    let segmentStart = null;
+
+    for (let index = 0; index < offsets.length; index++) {
+      const sourceOffset = offsets[index];
+      const selected = sourceOffset !== null
+        && sourceOffset !== undefined
+        && sourceOffset >= sourceRange.start
+        && sourceOffset < sourceRange.end;
+
+      if (selected && segmentStart === null) {
+        segmentStart = index;
+      } else if (!selected && segmentStart !== null) {
+        segments.push({ start: segmentStart, end: index });
+        segmentStart = null;
+      }
+    }
+
+    if (segmentStart !== null) {
+      segments.push({ start: segmentStart, end: offsets.length });
+    }
+
+    return segments;
+  }
+
+  wrapTextNodeSegments(node, segments, className) {
+    if (!segments.length) {
+      return;
+    }
+
+    const text = node.nodeValue;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+
+    for (const segment of segments) {
+      if (segment.start > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, segment.start)));
+      }
+
+      const mark = document.createElement('mark');
+      mark.className = className;
+      mark.textContent = text.slice(segment.start, segment.end);
+      fragment.appendChild(mark);
+      lastIndex = segment.end;
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    node.parentNode.replaceChild(fragment, node);
+  }
+
+  applyPreviewSelectionHighlights(text) {
+    if (!this.preview) {
+      return;
+    }
+
+    if (this.selectionRange && this.selectionRange.origin === 'preview' && this.previewOwnsNativeSelection()) {
+      this.rebuildPreviewSourceMap(text);
+      return;
+    }
+
+    this.clearPreviewSelectionHighlights();
+    this.rebuildPreviewSourceMap(text);
+
+    const sourceRange = this.activeSelectionRange(text);
+    if (!sourceRange) {
+      return;
+    }
+
+    const walker = document.createTreeWalker(this.preview, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        return this.shouldMapPreviewTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const nodes = [];
+    let node = walker.nextNode();
+
+    while (node) {
+      nodes.push(node);
+      node = walker.nextNode();
+    }
+
+    for (const textNode of nodes) {
+      this.wrapTextNodeSegments(
+        textNode,
+        this.sourceSegmentsForTextNode(textNode, sourceRange),
+        SelectionHighlightClass,
+      );
+    }
+
+    this.rebuildPreviewSourceMap(text);
+  }
+
+  updateSelectionHighlights(text) {
+    if (this.updatingSelectionHighlights) {
+      return;
+    }
+
+    this.updatingSelectionHighlights = true;
+    try {
+      this.updateEditorHighlights(text);
+      this.applyPreviewSelectionHighlights(text);
+    } finally {
+      this.updatingSelectionHighlights = false;
+    }
   }
 
   shouldHighlightPreviewNode(node) {
@@ -383,6 +903,8 @@ export default class Home extends React.Component {
   renderPreviewText(text) {
     this.preview.innerHTML = this.renderMarkdown(text);
     this.highlightPreviewMatches();
+    this.rebuildPreviewSourceMap(text);
+    this.applyPreviewSelectionHighlights(text);
   }
 
   updatePreviewText() {
@@ -498,6 +1020,7 @@ export default class Home extends React.Component {
                 {this.modes.map(mode =>
                   <div
                     key={mode.mode}
+                    onMouseDown={(event) => this.handleModeMouseDown(event)}
                     onClick={() => this.changeMode(mode)}
                     onKeyDown={(event) => this.handleModeKeyDown(event, mode)}
                     className={`sk-button button ${this.state.mode == mode ? 'selected info' : 'sk-secondary-contrast'}`}

@@ -316,6 +316,14 @@ async function paneState(frame) {
       mathScrollers: mathScrollerState(preview),
       editorHighlightCount: editorHighlights.querySelectorAll('mark.search-highlight').length,
       previewHighlightCount: preview.querySelectorAll('mark.search-highlight').length,
+      editorSelectionHighlightCount: editorHighlights.querySelectorAll('mark.selection-highlight').length,
+      previewSelectionHighlightCount: preview.querySelectorAll('mark.selection-highlight').length,
+      editorSelectionHighlightText: Array.from(editorHighlights.querySelectorAll('mark.selection-highlight'))
+        .map((element) => element.textContent)
+        .join('|'),
+      previewSelectionHighlightText: Array.from(preview.querySelectorAll('mark.selection-highlight'))
+        .map((element) => element.textContent)
+        .join('|'),
       editorHasSearchClass: editor.classList.contains('has-search-query'),
       editorHighlightActive: editorHighlights.classList.contains('active'),
       header: {
@@ -438,6 +446,72 @@ async function setSearchQuery(frame, query) {
   await new Promise((resolve) => setTimeout(resolve, 350));
 }
 
+async function selectEditorText(frame, targetText) {
+  await frame.evaluate((textToSelect) => {
+    const editor = document.getElementById('editor');
+    const start = editor.value.indexOf(textToSelect);
+    if (start < 0) {
+      throw new Error(`Missing editor text for selection smoke: ${textToSelect}`);
+    }
+
+    editor.focus();
+    editor.setSelectionRange(start, start + textToSelect.length);
+    editor.dispatchEvent(new Event('select', { bubbles: true }));
+    document.dispatchEvent(new Event('selectionchange'));
+  }, targetText);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
+async function selectPreviewText(frame, targetText) {
+  await frame.evaluate((textToSelect) => {
+    const preview = document.getElementById('preview');
+    const walker = document.createTreeWalker(preview, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent || parent.closest('.katex')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return node.nodeValue.includes(textToSelect)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP;
+      },
+    });
+    const node = walker.nextNode();
+    if (!node) {
+      throw new Error(`Missing preview text for selection smoke: ${textToSelect}`);
+    }
+
+    const start = node.nodeValue.indexOf(textToSelect);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + textToSelect.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  }, targetText);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
+function assertSelectionMirror(state, label, options) {
+  if (options.editorText) {
+    assert(state.editorSelectionHighlightCount > 0, `${label} should render mirrored editor selection highlights`);
+    assert(
+      state.editorSelectionHighlightText.includes(options.editorText),
+      `${label} editor mirror should include ${JSON.stringify(options.editorText)}, got ${JSON.stringify(state.editorSelectionHighlightText)}`
+    );
+    assert(state.editorHighlightActive, `${label} editor highlight layer should be active`);
+  }
+
+  if (options.previewText) {
+    assert(state.previewSelectionHighlightCount > 0, `${label} should render mirrored preview selection highlights`);
+    assert(
+      state.previewSelectionHighlightText.includes(options.previewText),
+      `${label} preview mirror should include ${JSON.stringify(options.previewText)}, got ${JSON.stringify(state.previewSelectionHighlightText)}`
+    );
+  }
+}
+
 function paneScrollRatio(pane) {
   const maxScrollTop = pane.scrollHeight - pane.clientHeight;
   if (maxScrollTop <= 0) {
@@ -490,7 +564,11 @@ function assertPreviewHasMath(state, label) {
     assert(!state.plainTextOutsideKatex.includes(needle), `${label} should not leave raw TeX outside KaTeX: ${needle}`);
   }
 
-  assert(state.previewHtml.includes('<strong>Q_EM = 137</strong>'), `${label} should keep bold prose math-like text as Markdown`);
+  assert(
+    state.previewHtml.includes('<strong>Q_EM = 137</strong>')
+      || state.previewHtml.includes('<strong><mark class="selection-highlight">Q_EM = 137</mark></strong>'),
+    `${label} should keep bold prose math-like text as Markdown`
+  );
   assert(!state.previewHtml.includes('annotation encoding="application/x-tex">This establishes'), `${label} should not feed the prose assignment sentence to KaTeX`);
   assert(state.plainTextOutsideKatex.includes('This establishes that the effective monopole strength'), `${label} should keep the assignment sentence outside KaTeX`);
   assert(state.plainTextOutsideKatex.includes('Q_EM = 137'), `${label} should keep the assignment value outside KaTeX`);
@@ -653,6 +731,28 @@ async function assertMathScrollsLocally(frame, label) {
     await setSearchQuery(frame, '');
     const clearedSearch = await paneState(frame);
     assertSearchCleared(clearedSearch, 'Cleared search');
+
+    const saveCountBeforeSelectionMirroring = await saveItemMessageCount(page);
+    await selectEditorText(frame, 'Q_EM = 137');
+    const splitEditorSelection = await paneState(frame);
+    assertSelectionMirror(splitEditorSelection, 'Split editor selection', { previewText: 'Q_EM = 137' });
+
+    await selectPreviewText(frame, 'Q_EM = 137');
+    const splitPreviewSelection = await paneState(frame);
+    assertSelectionMirror(splitPreviewSelection, 'Split preview selection', { editorText: '**Q_EM = 137**' });
+
+    await clickMode(frame, 'Edit');
+    const editFromPreviewSelection = await paneState(frame);
+    assertSelectionMirror(editFromPreviewSelection, 'Preview to Edit selection', { editorText: '**Q_EM = 137**' });
+
+    await selectEditorText(frame, 'Q_EM = 137');
+    await clickMode(frame, 'Preview');
+    const previewFromEditSelection = await paneState(frame);
+    assertSelectionMirror(previewFromEditSelection, 'Edit to Preview selection', { previewText: 'Q_EM = 137' });
+    assert(!previewFromEditSelection.previewSelectionHighlightText.includes('**'), 'Preview selection mirror should not render raw Markdown bold markers');
+
+    const saveCountAfterSelectionMirroring = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterSelectionMirroring, saveCountBeforeSelectionMirroring, 'Selection mirroring and mode switches should not send save-items messages');
     const saveCountBeforeModeClicks = await saveItemMessageCount(page);
 
     await clickMode(frame, 'Edit');
@@ -740,7 +840,7 @@ async function assertMathScrollsLocally(frame, label) {
     const saveCountAfterDefaultModeLoads = await saveItemMessageCount(page);
     assert.strictEqual(saveCountAfterDefaultModeLoads, saveCountAfterFinalModeClick, 'Default mode selection should not send save-items messages');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX, search highlights, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and content-based default modes work.');
+    console.log('Browser smoke test passed: built plugin renders KaTeX, search highlights, selection mirrors, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and content-based default modes work.');
   } finally {
     await browser.close();
     server.close();
