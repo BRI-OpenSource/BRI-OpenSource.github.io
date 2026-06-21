@@ -85,6 +85,7 @@ function assertKatexRendering() {
     ['double escaped inline bracket math', '\\\\(E = mc^2\\\\)'],
     ['double escaped display bracket math', '\\\\[\na^2 + b^2 = c^2\n\\\\]'],
     ['standalone symbolic assignment line', 'Q_EM = 137'],
+    ['standalone symbolic assignment with bold answer', 'Q_EM = **141**'],
     ['standalone Einstein tensor line', 'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
     ['standalone Ricci tensor line', 'R_{\\mu\\nu} - \\tfrac{1}{2} R, g_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
     ['standalone multiline Christoffel block', '\\Gamma^{\\lambda}_{\\mu\\nu} = \\tfrac{1}{2} g^{\\lambda\\sigma}\\left(\\partial_\\mu g_{\\nu\\sigma} +\n\\partial_\\nu g_{\\mu\\sigma} - \\partial_\\sigma g_{\\mu\\nu}\\right)'],
@@ -94,6 +95,23 @@ function assertKatexRendering() {
     const html = markdown.render(normalizeMathDelimiters(input));
     assertRenderedKatex(html, label);
     assert(!html.includes(`<p>${input}`), `${label} should not remain a raw Markdown paragraph`);
+  }
+
+  const mathBoldSamples = [
+    ['standalone bold answer', 'Q_EM = **141**'],
+    ['inline bracket bold answer', '\\(x = **141**\\)'],
+    ['display dollar bold answer', '$$\nx = **141**\n$$'],
+    ['inline dollar bold answer', '$x = **141**$'],
+  ];
+
+  for (const [label, input] of mathBoldSamples) {
+    const normalized = normalizeMathDelimiters(input);
+    expectIncludes(normalized, '\\mathbf{141}', `${label} normalized math`);
+    assert(!normalized.includes('**141**'), `${label} should remove Markdown bold markers before KaTeX`);
+    const html = markdown.render(normalized);
+    assertRenderedKatex(html, label);
+    assert(!html.includes('**141**'), `${label} should not leave raw Markdown bold markers in rendered math`);
+    assert(!html.includes('<mo>∗</mo>'), `${label} should not render bold markers as star operators`);
   }
 
   const proseSamples = [

@@ -7,9 +7,32 @@ const OPERATOR_PATTERN = /(?:=|\\equiv|\\approx|\\leq|\\geq|\\neq|\\to|\\mapsto|
 const EXPLICIT_MATH_DELIMITER_PATTERN = /(?:\\\(|\\\)|\\\[|\\\]|\$[^$\n]+\$)/;
 const LATEX_COMMAND_NAME_PATTERN = /\\[A-Za-z]+/g;
 const PROSE_WORD_PATTERN = /\b[A-Za-z]{3,}\b/g;
+const MARKDOWN_BOLD_IN_MATH_PATTERN = /\*\*([^*\n]+?)\*\*/g;
+
+function normalizeMarkdownBoldInMath(text) {
+  return text.replace(MARKDOWN_BOLD_IN_MATH_PATTERN, (_match, value) => {
+    return `\\mathbf{${value.trim()}}`;
+  });
+}
+
+function normalizeMarkdownBoldInDelimitedMath(text) {
+  return text
+    .replace(/(^|\n)([ \t]*)\$\$([\s\S]*?)(^|\n)([ \t]*)\$\$/gm, (_match, openLine, openIndent, body, closeLine, closeIndent) => {
+      return `${openLine}${openIndent}$$${normalizeMarkdownBoldInMath(body)}${closeLine}${closeIndent}$$`;
+    })
+    .replace(/(^|[\s([{])\\\(([^\n]+?)\\\)(?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
+      return `${prefix}\\(${normalizeMarkdownBoldInMath(body)}\\)`;
+    })
+    .replace(/(^|[\s([{])\\\[([^\n]+?)\\\](?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
+      return `${prefix}\\[${normalizeMarkdownBoldInMath(body)}\\]`;
+    })
+    .replace(/(^|[\s([{])\$(?!\$)([^$\n]+?)\$(?!\$)(?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
+      return `${prefix}$${normalizeMarkdownBoldInMath(body)}$`;
+    });
+}
 
 function normalizeExplicitMathDelimiters(text) {
-  return text
+  const normalizedDelimiters = text
     .replace(/(^|\n)([ \t]*)\\\$\\\$([\s\S]*?)(^|\n)([ \t]*)\\\$\\\$/gm, (_match, openLine, openIndent, body, closeLine, closeIndent) => {
       return `${openLine}${openIndent}$$${body}${closeLine}${closeIndent}$$`;
     })
@@ -28,6 +51,8 @@ function normalizeExplicitMathDelimiters(text) {
     .replace(/(^|[\s([{])\\\\\(([^\n]+?)\\\\\)(?=$|[\s.,;:)}\]])/g, (_match, prefix, body) => {
       return `${prefix}\\(${body}\\)`;
     });
+
+  return normalizeMarkdownBoldInDelimitedMath(normalizedDelimiters);
 }
 
 function hasExplicitMathDelimiter(line) {
@@ -84,7 +109,7 @@ function wrapStandaloneTexBlocks(text) {
 
     normalized.push('$$');
     for (const line of pendingTexLines) {
-      normalized.push(line.trim());
+      normalized.push(normalizeMarkdownBoldInMath(line.trim()));
     }
     normalized.push('$$');
     pendingTexLines = [];
@@ -111,7 +136,7 @@ function wrapStandaloneTexBlocks(text) {
     }
 
     if (inMathBlock) {
-      normalized.push(line);
+      normalized.push(normalizeMarkdownBoldInMath(line));
       continue;
     }
 

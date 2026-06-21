@@ -31,6 +31,7 @@ const noteText = [
   'We look for static, spherically symmetric background solutions \\(\\partial_t = 0\\).',
   'This establishes that the effective monopole strength in the twist channel is **Q_EM = 137**.',
   'The bare tensor fragment G_{\\mu\\nu} = 0 should remain prose when it appears inside a sentence.',
+  'Q_EM = **1493.5895634458918**',
   '',
   'Long inline equation: \\(\\Gamma^{\\lambda}_{\\mu\\nu} + R^{\\rho}_{\\sigma\\mu\\nu} + \\nabla_\\alpha \\nabla_\\beta \\nabla_\\gamma \\nabla_\\delta \\Phi_{\\lambda\\rho\\sigma\\mu\\nu} + \\Lambda g_{\\mu\\nu} + \\frac{8\\pi G}{c^4}T_{\\mu\\nu} + \\mathcal{A}_{\\alpha\\beta\\gamma\\delta} + \\mathcal{B}^{\\lambda\\rho}_{\\sigma\\mu\\nu} + \\sum_{n=1}^{100} \\frac{n^2 + \\alpha_n}{n^3 + \\beta_n} + \\prod_{k=1}^{20} \\left(1 + \\frac{x_k}{r^2}\\right) = 0\\) should scroll locally.',
   '',
@@ -436,6 +437,9 @@ function assertPreviewHasMath(state, label) {
   assert(state.plainTextOutsideKatex.includes('This establishes that the effective monopole strength'), `${label} should keep the assignment sentence outside KaTeX`);
   assert(state.plainTextOutsideKatex.includes('Q_EM = 137'), `${label} should keep the assignment value outside KaTeX`);
   assert(state.plainTextOutsideKatex.includes('The bare tensor fragment'), `${label} should keep bare tensor prose outside KaTeX`);
+  assert(state.previewHtml.includes('\\mathbf{1493.5895634458918}'), `${label} should convert bold math answers to TeX bold`);
+  assert(!state.previewHtml.includes('**1493.5895634458918**'), `${label} should not leave raw bold markers in math annotations`);
+  assert(!state.previewHtml.includes('<mo>∗</mo><mo>∗</mo><mn>1493.5895634458918'), `${label} should not render bold markers as star operators`);
 
   assert(state.preview.width > 100, `${label} preview should be visible`);
   assert(state.preview.height > 100, `${label} preview should have height`);
