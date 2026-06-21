@@ -29,6 +29,8 @@ const noteText = [
   'A central mass sources these fields through its geometric slip \\(\\Delta = 34.25\\).',
   'Since \\(L_0(r) \\propto -K/r\\), we can read the radial behavior.',
   'We look for static, spherically symmetric background solutions \\(\\partial_t = 0\\).',
+  'This establishes that the effective monopole strength in the twist channel is **Q_EM = 137**.',
+  'The bare tensor fragment G_{\\mu\\nu} = 0 should remain prose when it appears inside a sentence.',
   '',
   'Long inline equation: \\(\\Gamma^{\\lambda}_{\\mu\\nu} + R^{\\rho}_{\\sigma\\mu\\nu} + \\nabla_\\alpha \\nabla_\\beta \\nabla_\\gamma \\nabla_\\delta \\Phi_{\\lambda\\rho\\sigma\\mu\\nu} + \\Lambda g_{\\mu\\nu} + \\frac{8\\pi G}{c^4}T_{\\mu\\nu} + \\mathcal{A}_{\\alpha\\beta\\gamma\\delta} + \\mathcal{B}^{\\lambda\\rho}_{\\sigma\\mu\\nu} + \\sum_{n=1}^{100} \\frac{n^2 + \\alpha_n}{n^3 + \\beta_n} + \\prod_{k=1}^{20} \\left(1 + \\frac{x_k}{r^2}\\right) = 0\\) should scroll locally.',
   '',
@@ -428,6 +430,12 @@ function assertPreviewHasMath(state, label) {
   for (const needle of rawMathNeedles) {
     assert(!state.plainTextOutsideKatex.includes(needle), `${label} should not leave raw TeX outside KaTeX: ${needle}`);
   }
+
+  assert(state.previewHtml.includes('<strong>Q_EM = 137</strong>'), `${label} should keep bold prose math-like text as Markdown`);
+  assert(!state.previewHtml.includes('annotation encoding="application/x-tex">This establishes'), `${label} should not feed the prose assignment sentence to KaTeX`);
+  assert(state.plainTextOutsideKatex.includes('This establishes that the effective monopole strength'), `${label} should keep the assignment sentence outside KaTeX`);
+  assert(state.plainTextOutsideKatex.includes('Q_EM = 137'), `${label} should keep the assignment value outside KaTeX`);
+  assert(state.plainTextOutsideKatex.includes('The bare tensor fragment'), `${label} should keep bare tensor prose outside KaTeX`);
 
   assert(state.preview.width > 100, `${label} preview should be visible`);
   assert(state.preview.height > 100, `${label} preview should have height`);

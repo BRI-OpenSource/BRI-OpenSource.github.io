@@ -84,6 +84,7 @@ function assertKatexRendering() {
     ['escaped display dollar math', '\\$\\$\na^2 + b^2 = c^2\n\\$\\$'],
     ['double escaped inline bracket math', '\\\\(E = mc^2\\\\)'],
     ['double escaped display bracket math', '\\\\[\na^2 + b^2 = c^2\n\\\\]'],
+    ['standalone symbolic assignment line', 'Q_EM = 137'],
     ['standalone Einstein tensor line', 'G_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
     ['standalone Ricci tensor line', 'R_{\\mu\\nu} - \\tfrac{1}{2} R, g_{\\mu\\nu} + \\Lambda g_{\\mu\\nu} = \\frac{8\\pi G}{c^4} T_{\\mu\\nu}'],
     ['standalone multiline Christoffel block', '\\Gamma^{\\lambda}_{\\mu\\nu} = \\tfrac{1}{2} g^{\\lambda\\sigma}\\left(\\partial_\\mu g_{\\nu\\sigma} +\n\\partial_\\nu g_{\\mu\\sigma} - \\partial_\\sigma g_{\\mu\\nu}\\right)'],
@@ -93,6 +94,33 @@ function assertKatexRendering() {
     const html = markdown.render(normalizeMathDelimiters(input));
     assertRenderedKatex(html, label);
     assert(!html.includes(`<p>${input}`), `${label} should not remain a raw Markdown paragraph`);
+  }
+
+  const proseSamples = [
+    [
+      'bold bare assignment in prose',
+      'This establishes that the effective monopole strength in the twist channel is **Q_EM = 137**.',
+      '<strong>Q_EM = 137</strong>',
+    ],
+    [
+      'bare assignment in prose',
+      'The charge value Q_EM = 137 remains dimensionless.',
+      'The charge value Q_EM = 137 remains dimensionless.',
+    ],
+    [
+      'bare tensor fragment in prose',
+      'The field equation G_{\\mu\\nu} = 0 applies in vacuum.',
+      'The field equation G_{\\mu\\nu} = 0 applies in vacuum.',
+    ],
+  ];
+
+  for (const [label, input, expectedHtml] of proseSamples) {
+    const normalized = normalizeMathDelimiters(input);
+    assert.strictEqual(normalized, input, `${label} should not be normalized into display math`);
+    const html = markdown.render(normalized);
+    assert(!html.includes('class="katex"'), `${label} should not render as KaTeX`);
+    assert(!html.includes('<section><eqn>'), `${label} should not render as a display math block`);
+    expectIncludes(html, expectedHtml, label);
   }
 
   const fencedHtml = markdown.render(normalizeMathDelimiters('```text\n\\frac{1}{2}\n```'));

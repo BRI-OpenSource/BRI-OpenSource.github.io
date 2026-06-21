@@ -5,6 +5,8 @@ const LATEX_COMMAND_PATTERN = /\\(?:frac|tfrac|dfrac|sqrt|sum|prod|int|oint|lim|
 const SCRIPT_PATTERN = /[A-Za-z0-9)}](?:[_^](?:\{[^}\n]+\}|\\?[A-Za-z]+|[0-9]))/;
 const OPERATOR_PATTERN = /(?:=|\\equiv|\\approx|\\leq|\\geq|\\neq|\\to|\\mapsto|\\propto|[+\-*/])/;
 const EXPLICIT_MATH_DELIMITER_PATTERN = /(?:\\\(|\\\)|\\\[|\\\]|\$[^$\n]+\$)/;
+const LATEX_COMMAND_NAME_PATTERN = /\\[A-Za-z]+/g;
+const PROSE_WORD_PATTERN = /\b[A-Za-z]{3,}\b/g;
 
 function normalizeExplicitMathDelimiters(text) {
   return text
@@ -32,10 +34,28 @@ function hasExplicitMathDelimiter(line) {
   return EXPLICIT_MATH_DELIMITER_PATTERN.test(line);
 }
 
+function proseWordCount(line) {
+  const proseCandidate = line
+    .replace(LATEX_COMMAND_NAME_PATTERN, ' ')
+    .replace(/\\./g, ' ')
+    .replace(/[_^{}()[\],.;:+=*\/$|<>-]+/g, ' ');
+  const words = proseCandidate.match(PROSE_WORD_PATTERN);
+  return words ? words.length : 0;
+}
+
+function hasProseSentenceShape(line) {
+  return proseWordCount(line) >= 2;
+}
+
 function isProbableStandaloneTexLine(line, continuingBlock) {
   const trimmed = line.trim();
 
   if (!trimmed || trimmed.includes('`') || MARKDOWN_BLOCK_PATTERN.test(trimmed)) {
+    return false;
+  }
+
+  // Bare TeX auto-wrapping is for equation-shaped lines, not prose with a symbol in it.
+  if (hasProseSentenceShape(trimmed)) {
     return false;
   }
 
