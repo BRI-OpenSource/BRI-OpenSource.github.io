@@ -102,7 +102,7 @@ function harnessHtml() {
   <meta charset="utf-8">
   <style>
     html, body { width: 100%; height: 100%; margin: 0; }
-    iframe { width: 900px; height: 520px; border: 0; }
+    iframe { width: min(900px, 100vw); height: 520px; border: 0; }
   </style>
 </head>
 <body>
@@ -261,6 +261,7 @@ async function paneState(frame) {
     const searchRect = search.getBoundingClientRect();
     const modeButtonsRect = modeButtons.getBoundingClientRect();
     const headerRect = header.getBoundingClientRect();
+    const editorPaneStyle = getComputedStyle(editorPane);
     const editorStyle = getComputedStyle(editor);
     const previewStyle = getComputedStyle(preview);
 
@@ -321,21 +322,28 @@ async function paneState(frame) {
         left: headerRect.left,
         right: headerRect.right,
         width: headerRect.width,
+        bottom: headerRect.bottom,
       },
       modeButtons: {
         left: modeButtonsRect.left,
         right: modeButtonsRect.right,
         width: modeButtonsRect.width,
+        top: modeButtonsRect.top,
+        bottom: modeButtonsRect.bottom,
       },
       search: {
         value: search.value,
         left: searchRect.left,
         right: searchRect.right,
         width: searchRect.width,
+        top: searchRect.top,
+        bottom: searchRect.bottom,
       },
       editorPane: {
         width: editorPaneRect.width,
         height: editorPaneRect.height,
+        overflow: editorPaneStyle.overflow,
+        visibility: editorPaneStyle.visibility,
       },
       editorHighlights: {
         width: editorHighlightsRect.width,
@@ -559,9 +567,18 @@ function assertMathOverflowBehavior(state, label) {
 
 function assertToolbarSearchLayout(state, label) {
   assert(state.modeButtons.width > 100, `${label} should show the mode controls`);
-  assert(state.search.width > 100, `${label} should show the search input`);
+  assert(state.search.width > 70, `${label} should show the search input`);
   assert(state.modeButtons.left < state.search.left, `${label} should place mode controls left of search`);
+  assert(Math.abs(state.modeButtons.top - state.search.top) <= 4, `${label} search should stay on the mode-control row`);
   assert(state.search.right <= state.header.right + 1, `${label} search input should stay inside the header`);
+  assert(state.search.bottom <= state.header.bottom + 1, `${label} search input should stay inside the header vertically`);
+}
+
+function assertPreviewEditorHidden(state, label) {
+  assert.strictEqual(state.mode, 'preview', `${label} should be in preview mode`);
+  assert(state.editorPane.width <= 1, `${label} editor pane should have no visible width in preview mode`);
+  assert.strictEqual(state.editorPane.overflow, 'hidden', `${label} editor pane should clip hidden editor layers`);
+  assert.strictEqual(state.editorPane.visibility, 'hidden', `${label} editor pane should not paint hidden editor text`);
 }
 
 function assertSearchHighlights(state, label, options) {
@@ -690,6 +707,19 @@ async function assertMathScrollsLocally(frame, label) {
     await clickMode(frame, 'Preview');
     const saveCountAfterFinalModeClick = await saveItemMessageCount(page);
     assert.strictEqual(saveCountAfterFinalModeClick, saveCountAfterTextEdit, 'Final mode click should not send save-items messages');
+
+    const desktopFinalPreview = await paneState(frame);
+    assertToolbarSearchLayout(desktopFinalPreview, 'Desktop final Preview mode');
+    assertPreviewEditorHidden(desktopFinalPreview, 'Desktop final Preview mode');
+
+    await page.setViewport({ width: 430, height: 780 });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    const mobilePreview = await paneState(frame);
+    assertToolbarSearchLayout(mobilePreview, 'Narrow Preview mode');
+    assertPreviewEditorHidden(mobilePreview, 'Narrow Preview mode');
+
+    await page.setViewport({ width: 1000, height: 620 });
+    await new Promise((resolve) => setTimeout(resolve, 350));
 
     await setStaleStoredModeForNote(page, 'note-1', 0);
     const restoredFrame = await reloadPluginForNote(page, 'note-1');

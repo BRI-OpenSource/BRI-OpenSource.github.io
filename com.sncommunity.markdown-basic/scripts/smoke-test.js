@@ -192,10 +192,13 @@ function assertScrollbarCss() {
   const sharedIndex = scss.indexOf(scrollPaneSelector);
   const editorPane = blockFor(scss, '#editor-pane {');
   expectIncludes(editorPane, 'position: relative;', 'editor pane CSS');
+  expectIncludes(editorPane, 'overflow: hidden;', 'editor pane CSS');
   expectIncludes(editorPane, '&.split', 'editor pane CSS');
   expectIncludes(editorPane, 'width: calc(50% - 4px);', 'editor pane split CSS');
   expectIncludes(editorPane, '&.preview', 'editor pane CSS');
   expectIncludes(editorPane, 'width: 0 !important;', 'editor pane preview CSS');
+  expectIncludes(editorPane, 'flex-basis: 0;', 'editor pane preview CSS');
+  expectIncludes(editorPane, 'visibility: hidden;', 'editor pane preview CSS');
   assert(!/&\.preview\s*\{[^}]*display:\s*none/s.test(editorPane), 'editor pane preview mode should not use display:none');
 
   const mirroredEditorSelector = '#editor,\n#editor-highlights';
@@ -234,7 +237,8 @@ function assertScrollbarCss() {
 
   const toolbar = blockFor(scss, '.toolbar {');
   expectIncludes(toolbar, 'justify-content: space-between;', 'toolbar CSS');
-  expectIncludes(toolbar, 'gap: 12px;', 'toolbar CSS');
+  expectIncludes(toolbar, 'gap: 8px;', 'toolbar CSS');
+  expectIncludes(toolbar, 'flex-wrap: nowrap;', 'toolbar CSS');
 
   const segmentedButtons = blockFor(scss, '.segmented-buttons-container {');
   expectIncludes(segmentedButtons, 'justify-content: flex-start;', 'mode buttons alignment CSS');
@@ -253,11 +257,20 @@ function assertScrollbarCss() {
 
   const searchContainer = blockFor(scss, '.search-container {');
   expectIncludes(searchContainer, 'justify-content: flex-end;', 'search container CSS');
-  expectIncludes(searchContainer, 'flex: 1 1 180px;', 'search container CSS');
+  expectIncludes(searchContainer, 'flex: 1 1 140px;', 'search container CSS');
 
   const searchInput = blockFor(scss, '.search-input {');
   expectIncludes(searchInput, 'border-radius: 999px;', 'search input CSS');
-  expectIncludes(searchInput, 'width: min(240px, 100%);', 'search input CSS');
+  expectIncludes(searchInput, 'width: min(220px, 100%);', 'search input CSS');
+  expectIncludes(searchInput, 'border: 1px solid var(--sn-stylekit-info-color);', 'search input CSS');
+  expectIncludes(searchInput, 'box-shadow: inset 0 0 0 1px rgba(112, 88, 255, 0.22);', 'search input CSS');
+
+  const mobileHeader = blockFor(scss, '@media (max-width: 520px)');
+  const mobileToolbar = blockFor(mobileHeader, '.toolbar {');
+  expectIncludes(mobileToolbar, 'gap: 6px;', 'mobile toolbar CSS');
+  assert(!mobileToolbar.includes('flex-wrap: wrap;'), 'mobile toolbar should not force search onto a second row');
+  const mobileSearchContainer = blockFor(mobileHeader, '.search-container {');
+  expectIncludes(mobileSearchContainer, 'flex: 1 1 92px;', 'mobile search container CSS');
 
   const previewH1 = blockFor(preview, 'h1 {');
   expectIncludes(previewH1, 'font-size: 1.65em;', 'preview h1 CSS');
