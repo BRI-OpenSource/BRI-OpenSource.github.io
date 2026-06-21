@@ -184,20 +184,38 @@ function assertScrollbarCss() {
     'root wrapper must not force display:flex on the React wrapper'
   );
 
-  const sharedSelector = '#editor,\n#preview';
-  const sharedPane = blockFor(scss, sharedSelector);
-  expectIncludes(sharedPane, 'overflow: auto;', 'shared editor/preview CSS');
-  expectIncludes(sharedPane, 'scrollbar-width: thin;', 'shared editor/preview CSS');
+  const scrollPaneSelector = '#editor,\n#preview';
+  const scrollPane = blockFor(scss, scrollPaneSelector);
+  expectIncludes(scrollPane, 'overflow: auto;', 'shared editor/preview CSS');
+  expectIncludes(scrollPane, 'scrollbar-width: thin;', 'shared editor/preview CSS');
 
-  const sharedIndex = scss.indexOf(sharedSelector);
-  const editor = blockFor(scss, '#editor {', sharedIndex + sharedSelector.length);
-  expectIncludes(editor, '&.split', 'editor CSS');
-  expectIncludes(editor, 'width: calc(50% - 4px);', 'editor split CSS');
-  expectIncludes(editor, '&.preview', 'editor CSS');
-  expectIncludes(editor, 'width: 0 !important;', 'editor preview CSS');
-  assert(!/&\.preview\s*\{[^}]*display:\s*none/s.test(editor), 'editor preview mode should not use display:none');
+  const sharedIndex = scss.indexOf(scrollPaneSelector);
+  const editorPane = blockFor(scss, '#editor-pane {');
+  expectIncludes(editorPane, 'position: relative;', 'editor pane CSS');
+  expectIncludes(editorPane, '&.split', 'editor pane CSS');
+  expectIncludes(editorPane, 'width: calc(50% - 4px);', 'editor pane split CSS');
+  expectIncludes(editorPane, '&.preview', 'editor pane CSS');
+  expectIncludes(editorPane, 'width: 0 !important;', 'editor pane preview CSS');
+  assert(!/&\.preview\s*\{[^}]*display:\s*none/s.test(editorPane), 'editor pane preview mode should not use display:none');
 
-  const preview = blockFor(scss, '#preview {', sharedIndex + sharedSelector.length);
+  const mirroredEditorSelector = '#editor,\n#editor-highlights';
+  const mirroredEditor = blockFor(scss, mirroredEditorSelector, scss.indexOf(mirroredEditorSelector) + mirroredEditorSelector.length);
+  expectIncludes(mirroredEditor, 'position: absolute;', 'mirrored editor CSS');
+  expectIncludes(mirroredEditor, 'white-space: pre-wrap;', 'mirrored editor CSS');
+  expectIncludes(mirroredEditor, 'overflow-wrap: break-word;', 'mirrored editor CSS');
+
+  const editor = blockFor(scss, '#editor {', sharedIndex + scrollPaneSelector.length);
+  expectIncludes(editor, 'background-color: transparent;', 'editor CSS');
+  expectIncludes(editor, '&.has-search-query', 'editor search CSS');
+  expectIncludes(editor, 'caret-color: var(--sn-stylekit-editor-foreground-color);', 'editor search CSS');
+
+  const editorHighlightsSelector = '#editor-highlights {';
+  const editorHighlights = blockFor(scss, editorHighlightsSelector, scss.indexOf(editorHighlightsSelector) + editorHighlightsSelector.length);
+  expectIncludes(editorHighlights, 'pointer-events: none;', 'editor highlight CSS');
+  expectIncludes(editorHighlights, 'visibility: hidden;', 'editor highlight CSS');
+  expectIncludes(editorHighlights, '&.active', 'editor highlight CSS');
+
+  const preview = blockFor(scss, '#preview {', sharedIndex + scrollPaneSelector.length);
   expectIncludes(preview, '&.split', 'preview CSS');
   expectIncludes(preview, 'width: calc(50% - 4px);', 'preview split CSS');
   expectIncludes(preview, '&.preview', 'preview CSS');
@@ -207,6 +225,19 @@ function assertScrollbarCss() {
   expectIncludes(preview, 'overflow-y: auto;', 'preview CSS');
   expectIncludes(preview, 'flex: 1;', 'preview CSS');
   assert(!/&\.edit\s*\{[^}]*display:\s*none/s.test(preview), 'preview edit mode should not use display:none');
+
+  const highlightSelector = '#editor-highlights,\n#preview';
+  const highlightCss = blockFor(scss, highlightSelector, scss.indexOf(highlightSelector) + highlightSelector.length);
+  const highlightMark = blockFor(highlightCss, '.search-highlight {');
+  expectIncludes(highlightMark, 'background-color: rgba(255, 221, 87, 0.48);', 'search highlight CSS');
+  expectIncludes(highlightMark, 'color: inherit;', 'search highlight CSS');
+
+  const toolbar = blockFor(scss, '.toolbar {');
+  expectIncludes(toolbar, 'justify-content: space-between;', 'toolbar CSS');
+  expectIncludes(toolbar, 'gap: 12px;', 'toolbar CSS');
+
+  const segmentedButtons = blockFor(scss, '.segmented-buttons-container {');
+  expectIncludes(segmentedButtons, 'justify-content: flex-start;', 'mode buttons alignment CSS');
 
   const modeButtons = blockFor(scss, '.buttons {');
   expectIncludes(modeButtons, 'overflow: hidden;', 'mode buttons CSS');
@@ -219,6 +250,14 @@ function assertScrollbarCss() {
   expectIncludes(modeButton, 'border-right: 1px solid var(--sn-component-inner-border-color);', 'mode button CSS');
   expectIncludes(modeButton, '&:first-child', 'mode button CSS');
   expectIncludes(modeButton, '&:last-child', 'mode button CSS');
+
+  const searchContainer = blockFor(scss, '.search-container {');
+  expectIncludes(searchContainer, 'justify-content: flex-end;', 'search container CSS');
+  expectIncludes(searchContainer, 'flex: 1 1 180px;', 'search container CSS');
+
+  const searchInput = blockFor(scss, '.search-input {');
+  expectIncludes(searchInput, 'border-radius: 999px;', 'search input CSS');
+  expectIncludes(searchInput, 'width: min(240px, 100%);', 'search input CSS');
 
   const previewH1 = blockFor(preview, 'h1 {');
   expectIncludes(previewH1, 'font-size: 1.65em;', 'preview h1 CSS');

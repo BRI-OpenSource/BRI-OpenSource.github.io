@@ -8,6 +8,7 @@ const normalizeMathDelimiters = require('../lib/normalizeMathDelimiters');
 const EditMode = 0;
 const SplitMode = 1;
 const PreviewMode = 2;
+const SearchHighlightClass = 'search-highlight';
 
 export default class Home extends React.Component {
 
@@ -20,19 +21,25 @@ export default class Home extends React.Component {
       { mode: PreviewMode, label: 'Preview', css: 'preview' },
     ];
 
-    this.state = { mode: this.modes[0] };
+    this.state = {
+      mode: this.modes[0],
+      searchQuery: '',
+    };
     this.modeInitializedForNoteUuid = null;
   }
 
   componentDidMount() {
     this.simpleMarkdown = document.getElementById('simple-markdown');
+    this.editorPane = document.getElementById('editor-pane');
     this.editor = document.getElementById('editor');
+    this.editorHighlights = document.getElementById('editor-highlights');
     this.preview = document.getElementById('preview');
 
     this.configureMarkdown();
     this.connectToBridge();
     this.updatePreviewText();
     this.addChangeListener();
+    this.addEditorScrollListener();
 
     this.configureResizer();
     this.addTabHandler();
@@ -105,6 +112,8 @@ export default class Home extends React.Component {
       const maxScrollTop = target.scrollHeight - target.clientHeight;
       target.scrollTop = maxScrollTop > 0 ? maxScrollTop * safeRatio : 0;
     }
+
+    this.syncEditorHighlightsScroll();
   }
 
   applyScrollRatioAfterLayout(mode, ratio) {
@@ -124,6 +133,13 @@ export default class Home extends React.Component {
       this.updatePreviewText();
       this.applyScrollRatioAfterLayout(mode, scrollRatio);
     });
+  }
+
+  handleModeKeyDown(event, mode) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.changeMode(mode);
+    }
   }
 
   configureMarkdown() {
@@ -195,9 +211,9 @@ export default class Home extends React.Component {
       }
 
       this.editor.value = note.content.text;
-      this.preview.innerHTML = this.renderMarkdown(note.content.text);
+      this.updatePreviewText();
 
-      document.getElementById('editor').setAttribute(
+      this.editor.setAttribute(
         'spellcheck',
         JSON.stringify(note.content.spellcheck)
       );
@@ -219,10 +235,167 @@ export default class Home extends React.Component {
     return this.markdown.render(normalizeMathDelimiters(text));
   }
 
+  escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  searchQuery() {
+    return (this.state.searchQuery || '').trim();
+  }
+
+  hasSearchQuery() {
+    return this.searchQuery().length > 0;
+  }
+
+  highlightPlainText(text, query) {
+    const pattern = new RegExp(this.escapeRegExp(query), 'gi');
+    let result = '';
+    let lastIndex = 0;
+    let match = pattern.exec(text);
+
+    while (match) {
+      result += this.escapeHtml(text.slice(lastIndex, match.index));
+      result += `<mark class="${SearchHighlightClass}">${this.escapeHtml(match[0])}</mark>`;
+      lastIndex = pattern.lastIndex;
+      match = pattern.exec(text);
+    }
+
+    result += this.escapeHtml(text.slice(lastIndex));
+    return result;
+  }
+
+  updateEditorHighlights(text) {
+    if (!this.editor || !this.editorHighlights) {
+      return;
+    }
+
+    const query = this.searchQuery();
+    const hasQuery = query.length > 0;
+    this.editor.classList.toggle('has-search-query', hasQuery);
+    this.editorHighlights.classList.toggle('active', hasQuery);
+
+    if (!hasQuery) {
+      this.editorHighlights.innerHTML = '';
+      return;
+    }
+
+    const displayText = text.endsWith('\n') ? `${text} ` : text;
+    this.editorHighlights.innerHTML = this.highlightPlainText(displayText, query);
+    this.syncEditorHighlightsScroll();
+  }
+
+  syncEditorHighlightsScroll() {
+    if (!this.editor || !this.editorHighlights) {
+      return;
+    }
+
+    this.editorHighlights.scrollTop = this.editor.scrollTop;
+    this.editorHighlights.scrollLeft = this.editor.scrollLeft;
+  }
+
+  addEditorScrollListener() {
+    this.editor.addEventListener('scroll', () => {
+      this.syncEditorHighlightsScroll();
+    });
+  }
+
+  shouldHighlightPreviewNode(node) {
+    const parent = node.parentElement;
+    if (!parent || !node.nodeValue || !node.nodeValue.trim()) {
+      return false;
+    }
+
+    if (parent.closest(`.${SearchHighlightClass}, script, style, textarea, .katex-mathml`)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  highlightPreviewTextNode(node, pattern) {
+    const text = node.nodeValue;
+    pattern.lastIndex = 0;
+    const firstMatch = pattern.exec(text);
+
+    if (!firstMatch) {
+      return;
+    }
+
+    pattern.lastIndex = 0;
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match = pattern.exec(text);
+
+    while (match) {
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+
+      const mark = document.createElement('mark');
+      mark.className = SearchHighlightClass;
+      mark.textContent = match[0];
+      fragment.appendChild(mark);
+      lastIndex = pattern.lastIndex;
+      match = pattern.exec(text);
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    node.parentNode.replaceChild(fragment, node);
+  }
+
+  highlightPreviewMatches() {
+    const query = this.searchQuery();
+    if (!query || !this.preview) {
+      return;
+    }
+
+    const pattern = new RegExp(this.escapeRegExp(query), 'gi');
+    const walker = document.createTreeWalker(this.preview, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        return this.shouldHighlightPreviewNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const nodes = [];
+    let node = walker.nextNode();
+
+    while (node) {
+      nodes.push(node);
+      node = walker.nextNode();
+    }
+
+    for (const textNode of nodes) {
+      this.highlightPreviewTextNode(textNode, pattern);
+    }
+  }
+
+  renderPreviewText(text) {
+    this.preview.innerHTML = this.renderMarkdown(text);
+    this.highlightPreviewMatches();
+  }
+
   updatePreviewText() {
     const text = this.editor.value || '';
-    this.preview.innerHTML = this.renderMarkdown(text);
+    this.renderPreviewText(text);
+    this.updateEditorHighlights(text);
     return text;
+  }
+
+  handleSearchChange(event) {
+    this.setState({ searchQuery: event.target.value }, () => {
+      this.updatePreviewText();
+    });
   }
 
   addChangeListener() {
@@ -276,7 +449,7 @@ export default class Home extends React.Component {
 
       const colLeft = x - resizerWidth / 2;
       columnResizer.style.left = colLeft + 'px';
-      this.editor.style.width = (colLeft - safetyOffset) + 'px';
+      this.editorPane.style.width = (colLeft - safetyOffset) + 'px';
 
       this.removeSelection();
     });
@@ -319,21 +492,47 @@ export default class Home extends React.Component {
     return (
       <div id="simple-markdown" className={`sn-component ${this.state.platform}`}>
         <div id="header">
-          <div className="segmented-buttons-container sk-segmented-buttons">
-            <div className="buttons">
-              {this.modes.map(mode =>
-                <div key={mode} onClick={() => this.changeMode(mode)} className={`sk-button button ${this.state.mode == mode ? 'selected info' : 'sk-secondary-contrast'}`}>
-                  <div className="sk-label">
-                    {mode.label}
+          <div className="toolbar">
+            <div className="segmented-buttons-container sk-segmented-buttons">
+              <div className="buttons">
+                {this.modes.map(mode =>
+                  <div
+                    key={mode.mode}
+                    onClick={() => this.changeMode(mode)}
+                    onKeyDown={(event) => this.handleModeKeyDown(event, mode)}
+                    className={`sk-button button ${this.state.mode == mode ? 'selected info' : 'sk-secondary-contrast'}`}
+                    role="button"
+                    tabIndex="0"
+                    aria-pressed={this.state.mode == mode}
+                  >
+                    <div className="sk-label">
+                      {mode.label}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            </div>
+
+            <div className="search-container">
+              <input
+                id="note-search"
+                className="search-input"
+                type="search"
+                aria-label="Search note text"
+                placeholder="Search"
+                autoComplete="off"
+                value={this.state.searchQuery}
+                onChange={(event) => this.handleSearchChange(event)}
+              />
             </div>
           </div>
         </div>
 
         <div id="editor-container" className={this.state.mode.css}>
-          <textarea dir="auto" id="editor" className={this.state.mode.css}></textarea>
+          <div id="editor-pane" className={this.state.mode.css}>
+            <div dir="auto" id="editor-highlights" className={this.state.mode.css} aria-hidden="true"></div>
+            <textarea dir="auto" id="editor" className={this.state.mode.css}></textarea>
+          </div>
           <div id="column-resizer" className={this.state.mode.css}></div>
           <div id="preview" className={this.state.mode.css}></div>
         </div>

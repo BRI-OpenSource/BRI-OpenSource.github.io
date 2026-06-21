@@ -247,10 +247,20 @@ function listen(server) {
 
 async function paneState(frame) {
   return frame.evaluate(() => {
+    const editorPane = document.getElementById('editor-pane');
     const editor = document.getElementById('editor');
+    const editorHighlights = document.getElementById('editor-highlights');
     const preview = document.getElementById('preview');
+    const search = document.getElementById('note-search');
+    const modeButtons = document.querySelector('.segmented-buttons-container');
+    const header = document.getElementById('header');
+    const editorPaneRect = editorPane.getBoundingClientRect();
     const editorRect = editor.getBoundingClientRect();
+    const editorHighlightsRect = editorHighlights.getBoundingClientRect();
     const previewRect = preview.getBoundingClientRect();
+    const searchRect = search.getBoundingClientRect();
+    const modeButtonsRect = modeButtons.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
     const editorStyle = getComputedStyle(editor);
     const previewStyle = getComputedStyle(preview);
 
@@ -303,6 +313,36 @@ async function paneState(frame) {
       previewHtml: preview.innerHTML,
       plainTextOutsideKatex: plainTextOutsideKatex(preview),
       mathScrollers: mathScrollerState(preview),
+      editorHighlightCount: editorHighlights.querySelectorAll('mark.search-highlight').length,
+      previewHighlightCount: preview.querySelectorAll('mark.search-highlight').length,
+      editorHasSearchClass: editor.classList.contains('has-search-query'),
+      editorHighlightActive: editorHighlights.classList.contains('active'),
+      header: {
+        left: headerRect.left,
+        right: headerRect.right,
+        width: headerRect.width,
+      },
+      modeButtons: {
+        left: modeButtonsRect.left,
+        right: modeButtonsRect.right,
+        width: modeButtonsRect.width,
+      },
+      search: {
+        value: search.value,
+        left: searchRect.left,
+        right: searchRect.right,
+        width: searchRect.width,
+      },
+      editorPane: {
+        width: editorPaneRect.width,
+        height: editorPaneRect.height,
+      },
+      editorHighlights: {
+        width: editorHighlightsRect.width,
+        height: editorHighlightsRect.height,
+        scrollTop: editorHighlights.scrollTop,
+        scrollLeft: editorHighlights.scrollLeft,
+      },
       editor: {
         width: editorRect.width,
         height: editorRect.height,
@@ -377,6 +417,16 @@ async function appendEditorText(frame, text) {
     editor.value += textToAppend;
     editor.dispatchEvent(new Event('input', { bubbles: true }));
   }, text);
+  await new Promise((resolve) => setTimeout(resolve, 350));
+}
+
+async function setSearchQuery(frame, query) {
+  await frame.evaluate((nextQuery) => {
+    const search = document.getElementById('note-search');
+    const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    valueSetter.call(search, nextQuery);
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+  }, query);
   await new Promise((resolve) => setTimeout(resolve, 350));
 }
 
@@ -507,6 +557,38 @@ function assertMathOverflowBehavior(state, label) {
   assertLocalMathScroller(state, label, 'eq > .katex');
 }
 
+function assertToolbarSearchLayout(state, label) {
+  assert(state.modeButtons.width > 100, `${label} should show the mode controls`);
+  assert(state.search.width > 100, `${label} should show the search input`);
+  assert(state.modeButtons.left < state.search.left, `${label} should place mode controls left of search`);
+  assert(state.search.right <= state.header.right + 1, `${label} search input should stay inside the header`);
+}
+
+function assertSearchHighlights(state, label, options) {
+  assert.strictEqual(state.search.value, 'effective', `${label} search input should keep the query`);
+  assert(state.editorHighlightCount > 0, `${label} should render editor search highlights`);
+  assert(state.editorHasSearchClass, `${label} editor should enter search-highlight mode`);
+  assert(state.editorHighlightActive, `${label} editor highlight layer should be active`);
+
+  if (options.editorVisible) {
+    assert(state.editor.width > 100, `${label} editor should be visible`);
+    assert(state.editorHighlights.width > 100, `${label} editor highlights should be visible`);
+  }
+
+  if (options.previewVisible) {
+    assert(state.preview.width > 100, `${label} preview should be visible`);
+    assert(state.previewHighlightCount > 0, `${label} should render preview search highlights`);
+  }
+}
+
+function assertSearchCleared(state, label) {
+  assert.strictEqual(state.search.value, '', `${label} search input should be empty`);
+  assert.strictEqual(state.editorHighlightCount, 0, `${label} should clear editor highlights`);
+  assert.strictEqual(state.previewHighlightCount, 0, `${label} should clear preview highlights`);
+  assert(!state.editorHasSearchClass, `${label} editor should leave search-highlight mode`);
+  assert(!state.editorHighlightActive, `${label} editor highlight layer should be inactive`);
+}
+
 async function assertMathScrollsLocally(frame, label) {
   assertMathCanScroll(await scrollFirstOverflowingMath(frame, '.katex-display'), label, '.katex-display');
   assertMathCanScroll(await scrollFirstOverflowingMath(frame, 'eq > .katex'), label, 'eq > .katex');
@@ -534,6 +616,26 @@ async function assertMathScrollsLocally(frame, label) {
     assertPreviewHasMath(initialPreview, 'Initial Preview mode');
     assertMathOverflowBehavior(initialPreview, 'Initial Preview mode');
     await assertMathScrollsLocally(frame, 'Initial Preview mode');
+
+    const saveCountBeforeSearch = await saveItemMessageCount(page);
+    await setSearchQuery(frame, 'effective');
+    const searchedPreview = await paneState(frame);
+    assertToolbarSearchLayout(searchedPreview, 'Preview mode search');
+    assertSearchHighlights(searchedPreview, 'Preview mode search', { editorVisible: false, previewVisible: true });
+    const saveCountAfterSearch = await saveItemMessageCount(page);
+    assert.strictEqual(saveCountAfterSearch, saveCountBeforeSearch, 'Search input should not send save-items messages');
+
+    await clickMode(frame, 'Edit');
+    const searchedEdit = await paneState(frame);
+    assertSearchHighlights(searchedEdit, 'Edit mode search', { editorVisible: true, previewVisible: false });
+
+    await clickMode(frame, 'Split');
+    const searchedSplit = await paneState(frame);
+    assertSearchHighlights(searchedSplit, 'Split mode search', { editorVisible: true, previewVisible: true });
+
+    await setSearchQuery(frame, '');
+    const clearedSearch = await paneState(frame);
+    assertSearchCleared(clearedSearch, 'Cleared search');
     const saveCountBeforeModeClicks = await saveItemMessageCount(page);
 
     await clickMode(frame, 'Edit');
@@ -608,7 +710,7 @@ async function assertMathScrollsLocally(frame, label) {
     const saveCountAfterDefaultModeLoads = await saveItemMessageCount(page);
     assert.strictEqual(saveCountAfterDefaultModeLoads, saveCountAfterFinalModeClick, 'Default mode selection should not send save-items messages');
 
-    console.log('Browser smoke test passed: built plugin renders KaTeX, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and content-based default modes work.');
+    console.log('Browser smoke test passed: built plugin renders KaTeX, search highlights, mode switches stay local, text edits save, panes are scrollable, oversized math scrolls locally, and content-based default modes work.');
   } finally {
     await browser.close();
     server.close();
